@@ -1,0 +1,72 @@
+@import url('myaccount.css');
+
+body {
+	background-color:red !important;
+}
+
+.jnotify-container {
+	position: fixed !important;
+    text-align: center;
+    min-width: 480px;
+    width: auto;
+    max-width: 1024px;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    padding-top: 10px !important;
+    word-wrap: break-word;    
+}
+.jnotify-container .jnotify-notification .jnotify-message {
+	/* box-shadow: 2px 3px 6px #eee; */
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.portlet {
+/*    border: 1px solid #ddd;
+    padding: 20px;
+	margin-bottom: 30px;
+	box-shadow: 0px 1px 5px #ddd;*/
+	min-height: 220px;
+}
+
+.counternumber {
+	padding: 5px;
+	font-size: 1.1em;
+	/*color: white !important;*/
+	font-weight: bolder;
+}
+
+.boxresource {
+    /*width: 170px;
+    border: 1px solid #aaa;
+    height: 170px;
+    display: inline-block;
+    margin: 6px;
+    vertical-align: top;
+    padding: 5px;
+    border-radius: 5px;
+    text-align: center;*/
+	box-shadow: 0 4px 12px -8px #1b2e4bf0;
+	/*background-color: rgb(22, 41, 77);*/
+}
+
+.areaforresources {
+	display: flex;              /* establish flex formatting context */
+  	justify-content: center;
+	align-items: center;        /* center children vertically (if parent has height) */
+	flex-wrap: wrap;            /* allow wrapping to new lines if needed */
+	gap: 1rem; 
+}
+
+.boxresource .opacitymedium{
+	/*color:white !important;*/
+	font-weight:bold;
+	opacity:1;
+}
+
+.boxresource .opacitymedium:last-child{
+	background-color:white;
+	font-size: 0.6rem;
+	color:rgb(22, 41, 77) !important;
+	padding:4px;
+}
