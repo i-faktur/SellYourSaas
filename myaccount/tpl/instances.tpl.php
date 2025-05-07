@@ -622,7 +622,7 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 					}
 				}
 				if($included) {
-					$label_suffix .= '<br /><span style="font-size:0.6em; color:grey;"> Inclu dans ' . $included . '</span>';
+					$label_suffix .= '<br /><span style="font-size:0.6em; color:grey;">'.$langs->trans("includedin").' ' . $included . '</span>';
 					$line->qty = 1;
 					$line->price_ht = 0;
 				}

@@ -898,3 +898,6 @@ DefaultFromAppService=Den Wert aus dem Service-Setup verwenden
 SelectAServer=Wählen Sie einen Server aus ...
 SELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL=Automatische Servervorschläge deaktivieren
 SELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERALHelp=Standardmäßig schlägt das System einen Server vor (zufällig ausgewählt unter Servern im selben Land, dann unter anderen). Sie können die automatische Vorschlagsfunktion deaktivieren, um den Benutzer zur Auswahl eines Servers zu zwingen.
+
+#i-faktur
+includedin=Enhalten in
