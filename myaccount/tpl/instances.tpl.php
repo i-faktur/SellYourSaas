@@ -622,7 +622,7 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 					}
 				}
 				if($included) {
-					$label_suffix .= '<br /><span style="font-size:0.6em; color:grey;">'.$langs->trans("includedin").' ' . $included . '</span>';
+					$label_suffix .= '<br /><span style="font-size:0.6em; color:grey;"> Inclu dans ' . $included . '</span>';
 					$line->qty = 1;
 					$line->price_ht = 0;
 				}
@@ -635,11 +635,10 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 			print '<div class="resource inline-block boxresource">';
 
 			$resourceformula='';
-			
-			if ($tmpproduct) {
-			//if ($line->fk_product > 0) {
-				//$tmpproduct->fetch($line->fk_product);
-				
+			$tmpproduct = new Product($db);
+			if ($line->fk_product > 0) {
+				$tmpproduct->fetch($line->fk_product);
+
 				$maxHeight=40;
 				$maxWidth=40;
 				$alt='';
@@ -676,10 +675,9 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 				} elseif ($tmpproduct->array_options['options_resource_label'] == 'User' && preg_match('/User/i', $tmpproduct->label)) {
 					$labelprod = $langs->trans("Users");
 				}
-				$labelprod .= $label_suffix;
 
 				print '<span class="opacitymedium small labelprod">'.$labelprod.'</span><br>';
-	
+
 				// Qty
 				$resourceformula = $tmpproduct->array_options['options_resource_formula'];
 				if (preg_match('/SQL:/', $resourceformula)) {
@@ -769,9 +767,6 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 			}
 
 			print '</div>';
-			if ($tmpproduct && $tmpproduct->url) {
-				print '</a>';
-			}
 		}
 
 		// Add new option box
