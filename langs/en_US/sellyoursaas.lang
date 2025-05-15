@@ -926,6 +926,3 @@ NoWebsiteToMakeOnline=No website to make online. To make a website online, first
 AlreadyToLastVersionUpgrade=This application is already to last version of v%s.
 NewerVersionAvailable=A new version of the application is available. The current version of the application is <b>v%s</b> and the last version available for the application is <b>v%s</b>.<br>  To proceed to upgrade click on the following button
 NbOfPendingReseller=Number of pending reseller
-
-#i-faktur
-includedin=Included in

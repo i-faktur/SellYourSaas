@@ -910,6 +910,3 @@ TIGRP-TECHISSUE-OTHER=Autre (bug, erreur, instance inaccessible)
 DefaultSellYourSaasCatLabel=Services Cloud
 DefaultSellYourSaasCustomerCatLabel=Prospects or Customers Cloud
 DefaultSellYourSaasSupplierCatLabel=Resellers Cloud
-
-#i-faktur
-includedin=Inclus dans
