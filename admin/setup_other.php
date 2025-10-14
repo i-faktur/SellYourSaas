@@ -55,7 +55,14 @@ if (! $res && file_exists("../../../main.inc.php")) {
 if (! $res) {
 	die("Include of main fails");
 }
-
+/**
+ * The main.inc.php has been included so the following variable are now defined:
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ * @var User $user
+ */
 require_once DOL_DOCUMENT_ROOT."/core/lib/admin.lib.php";
 require_once DOL_DOCUMENT_ROOT."/core/lib/files.lib.php";
 require_once DOL_DOCUMENT_ROOT."/core/lib/images.lib.php";
@@ -115,6 +122,9 @@ foreach ($tmpservices as $key => $tmpservice) {
 	}
 	$arrayofsuffixfound[$tmpservice] = $suffix;
 }
+if (empty($arrayofsuffixfound)) {
+	$arrayofsuffixfound[] = '';
+}
 // $arrayofsuffixfound should be now array('mysaasdomain'=>'', mysaasdomainalt'=>'_MYSAASDOMAINALT_COM', ...)
 //var_dump($arrayofsuffixfound);
 
@@ -139,38 +149,11 @@ if ($action == 'set') {
 		if (GETPOSTISSET('SELLYOURSAAS_ENABLE_SEPA_FOR_THIRDPARTYID')) {
 			dolibarr_set_const($db, 'SELLYOURSAAS_ENABLE_SEPA_FOR_THIRDPARTYID', GETPOST("SELLYOURSAAS_ENABLE_SEPA_FOR_THIRDPARTYID", 'intcomma'), 'chaine', 0, '', $conf->entity);
 		}
-		if (GETPOSTISSET('SELLYOURSAAS_ENABLE_CUSTOMURL')) {
-			dolibarr_set_const($db, 'SELLYOURSAAS_ENABLE_CUSTOMURL', GETPOST("SELLYOURSAAS_ENABLE_CUSTOMURL", 'int'), 'chaine', 0, '', $conf->entity);
-		}
-		if (GETPOSTISSET('SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID')) {
-			dolibarr_set_const($db, 'SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID', GETPOST("SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID", 'intcomma'), 'chaine', 0, '', $conf->entity);
-		}
-		if (GETPOSTISSET('SELLYOURSAAS_ENABLE_WEBSITES')) {
-			dolibarr_set_const($db, 'SELLYOURSAAS_ENABLE_WEBSITES', GETPOST("SELLYOURSAAS_ENABLE_WEBSITES", 'int'), 'chaine', 0, '', $conf->entity);
-		}
-		if (GETPOSTISSET('SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES_FOR_THIRDPARTYID')) {
-			dolibarr_set_const($db, 'SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES_FOR_THIRDPARTYID', GETPOST("SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES_FOR_THIRDPARTYID", 'intcomma'), 'chaine', 0, '', $conf->entity);
-		}
-		if (GETPOSTISSET('SELLYOURSAAS_PRODUCT_ID_FOR_WEBSITE_DEPLOYMENT')) {
-			dolibarr_set_const($db, "SELLYOURSAAS_PRODUCT_ID_FOR_WEBSITE_DEPLOYMENT", GETPOST("SELLYOURSAAS_PRODUCT_ID_FOR_WEBSITE_DEPLOYMENT", 'int'), 'chaine', 0, '', $conf->entity);
-		}
-		if (GETPOSTISSET('SELLYOURSAAS_PRODUCT_ID_FOR_CUSTOM_URL')) {
-			dolibarr_set_const($db, "SELLYOURSAAS_PRODUCT_ID_FOR_CUSTOM_URL", GETPOST("SELLYOURSAAS_PRODUCT_ID_FOR_CUSTOM_URL", 'int'), 'chaine', 0, '', $conf->entity);
-		}
 
 		dolibarr_set_const($db, 'SELLYOURSAAS_MAX_MONTHLY_AMOUNT_OF_INVOICE', GETPOST("SELLYOURSAAS_MAX_MONTHLY_AMOUNT_OF_INVOICE", 'int'), 'chaine', 0, '', $conf->entity);
 
 		dolibarr_set_const($db, 'SELLYOURSAAS_INFRA_COST', GETPOST("SELLYOURSAAS_INFRA_COST", 'int'), 'chaine', 0, '', $conf->entity);
 		dolibarr_set_const($db, 'SELLYOURSAAS_PERCENTAGE_FEE', GETPOST("SELLYOURSAAS_PERCENTAGE_FEE", 'int'), 'chaine', 0, '', $conf->entity);
-
-		dolibarr_set_const($db, "SELLYOURSAAS_DATADOG_ENABLED", GETPOST("SELLYOURSAAS_DATADOG_ENABLED", 'int'), 'chaine', 0, '', $conf->entity);
-		dolibarr_set_const($db, "SELLYOURSAAS_DATADOG_APIKEY", GETPOST("SELLYOURSAAS_DATADOG_APIKEY", 'alphanohtml'), 'chaine', 0, '', $conf->entity);
-		dolibarr_set_const($db, "SELLYOURSAAS_DATADOG_APPKEY", GETPOST("SELLYOURSAAS_DATADOG_APPKEY", 'alphanohtml'), 'chaine', 0, '', $conf->entity);
-
-		dolibarr_set_const($db, "SELLYOURSAAS_AUTOMIGRATION_CODE", GETPOST("SELLYOURSAAS_AUTOMIGRATION_CODE", 'alphanohtml'), 'chaine', 0, '', $conf->entity);
-		dolibarr_set_const($db, "SELLYOURSAAS_AUTOUPGRADE_CODE", GETPOST("SELLYOURSAAS_AUTOUPGRADE_CODE", 'alphanohtml'), 'chaine', 0, '', $conf->entity);
-
-		dolibarr_set_const($db, "SELLYOURSAAS_LAST_STABLE_VERSION_DOLIBARR", GETPOST("SELLYOURSAAS_LAST_STABLE_VERSION_DOLIBARR", 'alphanohtml'), 'chaine', 0, '', $conf->entity);
 
 		foreach ($arrayofsuffixfound as $suffix) {
 			dolibarr_set_const($db, "SELLYOURSAAS_SUPPORT_URL".$suffix, GETPOST("SELLYOURSAAS_SUPPORT_URL".$suffix), 'chaine', 0, '', $conf->entity);
@@ -312,7 +295,6 @@ if ($action == 'removelogoblack') {
 
 $formother=new FormOther($db);
 $form=new Form($db);
-$formticket = new FormTicket($db);
 
 $help_url="";
 llxHeader("", $langs->trans("SellYouSaasSetup"), $help_url);
@@ -332,8 +314,9 @@ print '<input type="hidden" name="action" value="set">';
 print '<div class="div-table-responsive">'; // You can use div-table-responsive-no-min if you dont need reserved height for your table
 print '<table class="noborder centpercent">';
 print '<tr class="liste_titre">';
-print '<td>'.$langs->trans("Parameters").'</td><td>'.$langs->trans("Value").'</td>';
-print '<td><div class="float">'.$langs->trans("Examples").'</div><div class="floatright"><input type="submit" class="button buttongen" value="'.$langs->trans("Save").'"></div></td>';
+print '<td class="titlefieldmiddle">'.$langs->trans("Parameters").'</td><td></td>';
+print '<td><div class="float">'.$langs->trans("Examples").'</div><div class="floatright">';
+print '</div></td>';
 print "</tr>\n";
 
 print '<tr class="oddeven"><td>'.$langs->trans("SellYourSaasStatusUrl").'</td>';
@@ -392,13 +375,13 @@ foreach ($arrayofsuffixfound as $service => $suffix) {
 	print '<tr class="oddeven"><td><label for="logo">'.$service.' - '.$langs->trans("LogoWhiteBackground").' (png,jpg)</label></td><td>';
 	print '<table width="100%" class="nobordernopadding"><tr class="nocellnopadd"><td valign="middle" class="nocellnopadd">';
 	print '<input type="file" class="flat class=minwidth200" name="logo'.$suffix.'" id="logo'.$suffix.'">';
-	print '</td><td class="nocellnopadd" valign="middle">';
+	print '</td><td class="nocellnopadd valignmiddle">';
 	$constname = 'SELLYOURSAAS_LOGO_MINI'.$suffix;
 	print '<!-- constname = '.$constname.' -->';
 	if (getDolGlobalString($constname)) {
 		print '<a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=removelogo&suffix='.urlencode($suffix).'">'.img_delete($langs->trans("Delete")).'</a>';
 		if (file_exists($conf->mycompany->dir_output.'/logos/thumbs/' . getDolGlobalString($constname))) {
-			print ' &nbsp; ';
+			print '</td></td>';
 			print '<img src="'.DOL_URL_ROOT.'/viewimage.php?modulepart=mycompany&amp;file='.urlencode('logos/thumbs/' . getDolGlobalString($constname)).'">';
 		}
 	} else {
@@ -412,12 +395,12 @@ foreach ($arrayofsuffixfound as $service => $suffix) {
 	print '<tr class="oddeven"><td><label for="logo">'.$service.' - '.$langs->trans("LogoBlackBackground").' (png,jpg)</label></td><td>';
 	print '<table width="100%" class="nobordernopadding"><tr class="nocellnopadd"><td valign="middle" class="nocellnopadd">';
 	print '<input type="file" class="flat class=minwidth200" name="logoblack'.$suffix.'" id="logoblack'.$suffix.'">';
-	print '</td><td class="nocellnopadd" valign="middle">';
+	print '</td><td class="nocellnopadd valignmiddle">';
 	$constname = 'SELLYOURSAAS_LOGO_MINI_BLACK'.$suffix;
 	if (getDolGlobalString($constname)) {
 		print '<a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=removelogoblack&suffix='.urlencode($suffix).'">'.img_delete($langs->trans("Delete")).'</a>';
 		if (file_exists($conf->mycompany->dir_output.'/logos/thumbs/' . getDolGlobalString($constname))) {
-			print ' &nbsp; ';
+			print '</td></td>';
 			print '<img src="'.DOL_URL_ROOT.'/viewimage.php?modulepart=mycompany&amp;file='.urlencode('logos/thumbs/' . getDolGlobalString($constname)).'">';
 		}
 	} else {
@@ -467,81 +450,6 @@ if (getDolGlobalString('SELLYOURSAAS_ENABLE_SEPA')) {
 	print '<input class="maxwidth200" type="text" name="SELLYOURSAAS_ENABLE_SEPA_FOR_THIRDPARTYID" value="'.getDolGlobalString('SELLYOURSAAS_ENABLE_SEPA_FOR_THIRDPARTYID', '').'">';
 	print '</td>';
 	print '<td><span class="opacitymedium small">12345,12346,... (keep empty to allow for everybody)</span></td>';
-	print '</tr>';
-}
-
-// Allow Custom URL
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ENABLE_CUSTOMURL").'</td>';
-print '<td>';
-if ($conf->use_javascript_ajax) {
-	print ajax_constantonoff('SELLYOURSAAS_ENABLE_CUSTOMURL', array(), null, 0, 0, 1);
-} else {
-	if (!getDolGlobalString('SELLYOURSAAS_ENABLE_CUSTOMURL')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_CUSTOMURL">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
-	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_CUSTOMURL">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
-	}
-}
-print '</td>';
-print '<td><span class="opacitymedium small">Set to yes to allow customer to set a custom URL.</td>';
-print '</tr>';
-
-// Allow Custom URL for specific thirdparty ID ?
-if (getDolGlobalString('SELLYOURSAAS_ENABLE_CUSTOMURL')) {
-	print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID").'</td>';
-	print '<td>';
-	print '<input class="maxwidth200" type="text" name="SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID" value="'.getDolGlobalString('SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID', '').'">';
-	print '</td>';
-	print '<td><span class="opacitymedium small">12345,12346,... (keep empty to allow for everybody)</span></td>';
-	print '</tr>';
-}
-
-// Product ID for custom URL
-if (getDolGlobalString('SELLYOURSAAS_ENABLE_CUSTOMURL')) {
-	print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_PRODUCT_ID_FOR_CUSTOM_URL").'</td>';
-	print '<td>';
-	print img_picto('', 'product', 'class="pictofixedwidth"');
-	print $form->select_produits_list(getDolGlobalString('SELLYOURSAAS_PRODUCT_ID_FOR_CUSTOM_URL'), "SELLYOURSAAS_PRODUCT_ID_FOR_CUSTOM_URL", '', 0, 0, '', 1, 2, 0, 0, 1, 0, 'maxwidth500 widthcentpercentminusx');
-	print '</td>';
-	print '<td><span class="opacitymedium small"></span></td>';
-	print '</tr>';
-}
-
-// Allow deployment of Dolibarr website
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES").'</td>';
-print '<td>';
-if ($conf->use_javascript_ajax) {
-	print ajax_constantonoff('SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES', array(), null, 0, 0, 1);
-} else {
-	if (!getDolGlobalString('SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
-	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
-	}
-}
-print '</td>';
-print '<td><span class="opacitymedium small">Set to yes to allow customer to set a website online.</td>';
-print '</tr>';
-
-
-// Allow deployment of Dolibarr website for specific thirdparty ID ?
-if (getDolGlobalString('SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES')) {
-	print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES_FOR_THIRDPARTYID").'</td>';
-	print '<td>';
-	print '<input class="maxwidth200" type="text" name="SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES_FOR_THIRDPARTYID" value="'.getDolGlobalString('SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES_FOR_THIRDPARTYID', '').'">';
-	print '</td>';
-	print '<td><span class="opacitymedium small">12345,12346,... (keep empty to allow for everybody)</span></td>';
-	print '</tr>';
-}
-
-// Product ID for website deployment
-if (getDolGlobalString('SELLYOURSAAS_ENABLE_DOLIBARR_WEBSITES')) {
-	print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_PRODUCT_ID_FOR_WEBSITE_DEPLOYMENT").'</td>';
-	print '<td>';
-	print img_picto('', 'product', 'class="pictofixedwidth"');
-	print $form->select_produits_list(getDolGlobalInt('SELLYOURSAAS_PRODUCT_ID_FOR_WEBSITE_DEPLOYMENT'), "SELLYOURSAAS_PRODUCT_ID_FOR_WEBSITE_DEPLOYMENT", '', 0, 0, '', 1, 2, 0, 0, 1, 0, 'maxwidth500 widthcentpercentminusx');
-	print '</td>';
-	print '<td><span class="opacitymedium small"></span></td>';
 	print '</tr>';
 }
 
@@ -597,29 +505,6 @@ print '</td>';
 print '<td><span class="opacitymedium small">0.02</span></td>';
 print '</tr>';
 
-// SELLYOURSAAS_DATADOG_ENABLED
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_DATADOG_ENABLED").'</td>';
-print '<td>';
-$array = array('0' => 'No', '1' => 'Yes', '2' => 'Yes with detail of remote action errors');
-print $form->selectarray('SELLYOURSAAS_DATADOG_ENABLED', $array, getDolGlobalString('SELLYOURSAAS_DATADOG_ENABLED'), 0);
-print '</td>';
-print '<td><span class="opacitymedium small">If a datadog agent is running on each of your server, enable this option so SellyourSaas will send metrics sellyoursaas.* to Datadog.</td>';
-print '</tr>';
-
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_DATADOG_APPKEY").'</td>';
-print '<td>';
-print '<input class="maxwidth200" type="text" name="SELLYOURSAAS_DATADOG_APPKEY" value="'.getDolGlobalString('SELLYOURSAAS_DATADOG_APPKEY', '').'">';
-print '</td>';
-print '<td><span class="opacitymedium small">MyApp</span></td>';
-print '</tr>';
-
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_DATADOG_APIKEY").'</td>';
-print '<td>';
-print '<input class="maxwidth200" type="text" name="SELLYOURSAAS_DATADOG_APIKEY" value="'.getDolGlobalString('SELLYOURSAAS_DATADOG_APIKEY', '').'">';
-print '</td>';
-print '<td><span class="opacitymedium small">45fdf4sds54fdf</span></td>';
-print '</tr>';
-
 print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ASK_DESTROY_REASON").'</td>';
 print '<td>';
 if ($conf->use_javascript_ajax) {
@@ -640,7 +525,8 @@ print '</tr>';
 
 print '<tr class="liste_titre">';
 print '<td>'.$langs->trans("SupportFeatures").'</td><td></td>';
-print '<td></td>';
+print '<td>';
+print '</td>';
 print "</tr>\n";
 
 foreach ($arrayofsuffixfound as $service => $suffix) {
@@ -675,27 +561,10 @@ foreach ($arrayofsuffixfound as $service => $suffix) {
 	}
 }
 
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_AUTOMIGRATION_CODE").'</td>';
-print '<td class="nowraponall">';
-print $formticket->selectGroupTickets(getDolGlobalString('SELLYOURSAAS_AUTOMIGRATION_CODE'), 'SELLYOURSAAS_AUTOMIGRATION_CODE', '', 2, 1, 0, 0, 'maxwidth400 widthcentpercentminusx');
-print '</td>';
-print '<td></td>';
-print '</tr>';
-
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_AUTOUPGRADE_CODE").'</td>';
-print '<td class="nowraponall">';
-print $formticket->selectGroupTickets(getDolGlobalString('SELLYOURSAAS_AUTOUPGRADE_CODE'), 'SELLYOURSAAS_AUTOUPGRADE_CODE', '', 2, 1, 0, 0, 'maxwidth400 widthcentpercentminusx');
-print ' &nbsp; ';
-print '<input class="maxwidth100" type="text" name="SELLYOURSAAS_LAST_STABLE_VERSION_DOLIBARR" value="'.getDolGlobalString('SELLYOURSAAS_LAST_STABLE_VERSION_DOLIBARR', '').'">';
-print '</td>';
-print '<td></td>';
-print '</tr>';
-
 print '</table>';
 print '</div>';
 
-print '</table>';
-print '</div>';
+print '<center><input type="submit" class="button buttongen" value="'.$langs->trans("Save").'"></center>';
 
 print "</form>\n";
 

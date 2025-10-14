@@ -158,7 +158,7 @@ class Packages extends CommonObject
 	/**
 	 * Constructor
 	 *
-	 * @param DoliDb $db Database handler
+	 * @param DoliDB $db Database handler
 	 */
 	public function __construct(DoliDB $db)
 	{
@@ -473,15 +473,11 @@ class Packages extends CommonObject
 				$obj = $this->db->fetch_object($result);
 				$this->id = $obj->rowid;
 				if ($obj->fk_user_creat) {
-					$cuser = new User($this->db);
-					$cuser->fetch($obj->fk_user_creat);
-					$this->user_creation = $cuser;
+					$this->user_creation_id = $obj->fk_user_creat;
 				}
 
 				if ($obj->fk_user_modif) {
-					$vuser = new User($this->db);
-					$vuser->fetch($obj->fk_user_modif);
-					$this->user_modification = $vuser;
+					$this->user_modification_id = $obj->fk_user_modif;
 				}
 
 				$this->date_creation     = $this->db->jdate($obj->datec);

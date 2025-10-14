@@ -599,7 +599,7 @@ for fic in `ls /var/spool/cron/crontabs`;
 do
 	id $fic >/dev/null 2>/dev/null
 	if [[ "x$?" == "x1" ]]; then
-		echo Found a crontabs file for user $fic that does not exists. We clean crontabs file.
+		echo "Found a crontabs file in /var/spool/cron/crontabs for user $fic that does not exists. We clean crontabs file by moving them into crontabs.disabled"
 		mv /var/spool/cron/crontabs/$fic /var/spool/cron/crontabs.disabled 
 	fi
 done;
@@ -680,6 +680,8 @@ if [[ $testorconfirm == "confirm" ]]; then
 	rm -f /tmp/osusernamefound*
 	echo rm -f /tmp/idlistofdb
 	rm -f /tmp/idlistofdb
+	echo rm -f /tmp/cache
+	rm -f /tmp/cache
 fi
 
 

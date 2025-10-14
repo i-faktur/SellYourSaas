@@ -15,7 +15,7 @@
 # undeploy     remove only instance (must be easy to restore) - rest can be done later with clean.sh
 
 export now=`date +'%Y-%m-%d %H:%M:%S'`
-export nowlog=`date +'%Y%m%d-%H%M%S'`
+export nowfile=`date +'%Y%m%d-%H%M%S'`
 
 echo
 echo
@@ -619,8 +619,8 @@ if [[ "$dnsserver" == "1" ]]; then
 				exit 16
 			fi
 			
-			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Archive file with cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowlog"
-			cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowlog
+			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Archive file with cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowfile"
+			cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowfile
 			
 			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Move new host file"
 			mv -fu /tmp/${ZONE}.$PID /etc/bind/${ZONE}
@@ -694,8 +694,8 @@ if [[ "$dnsserver" == "1" ]]; then
 				exit 18
 			fi
 			
-			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Archive file with cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowlog"
-			cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowlog
+			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Archive file with cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowfile"
+			cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowfile
 			
 			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Move new host file with mv -fu /tmp/${ZONE}.$PID /etc/bind/${ZONE}"
 			mv -fu /tmp/${ZONE}.$PID /etc/bind/${ZONE}
@@ -749,10 +749,15 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 					datecache=0
 				fi
 			fi
-			echo `date +'%Y-%m-%d %H:%M:%S'`" datesource=$datesource datecache=$datecache"
+			
+			datecachets=$(date -d "${datecache}" +%s)
+			now=$(date +%s)
+			datecacheage=$(( (now - datecachets) / 86400 ))
+			
+			echo `date +'%Y-%m-%d %H:%M:%S'`" datesource (archive on NFS dir)=$datesource - datecache (archive on local dir)=$datecache - age of datecache=$datecacheage"
 
-			if [ $datecache -eq 0 -o $datesource -gt $datecache ]; then
-				echo `date +'%Y-%m-%d %H:%M:%S'`" Local cache does not exists or is too old, we recreate local cache"
+			if [ $datecache -eq 0 -o $datesource -gt $datecache -o "$datecacheage" -gt 7 ]; then
+				echo `date +'%Y-%m-%d %H:%M:%S'`" Local cache does not exists or is too old, we recreate local cache from NFS dir"
 				mkdir -p "/tmp/cache$dirwithsources1"
 				#echo "cp -r $dirwithsources1/. /tmp/cache$dirwithsources1"
 
@@ -774,11 +779,11 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 			fi 
 
 			if [[ -f /tmp/cache$dirwithsources1.tar.zst ]]; then
-				echo `date +'%Y-%m-%d %H:%M:%S'`" Local zst cache found. We use it with: tar -I zstd -xf /tmp/cache$dirwithsources1.tar.zst --directory $targetdirwithsources1/"
+				echo `date +'%Y-%m-%d %H:%M:%S'`" Local zst cache found for src 1. We use it with: tar -I zstd -xf /tmp/cache$dirwithsources1.tar.zst --directory $targetdirwithsources1/"
 				tar -I zstd -xf /tmp/cache$dirwithsources1.tar.zst --directory $targetdirwithsources1/
 			else
 				if [ -f /tmp/cache$dirwithsources1.tgz ]; then
-					echo `date +'%Y-%m-%d %H:%M:%S'`" Local tgz cache found. We use it with: tar -xzf /tmp/cache$dirwithsources1.tgz --directory $targetdirwithsources1/"
+					echo `date +'%Y-%m-%d %H:%M:%S'`" Local tgz cache found for src 1. We use it with: tar -xzf /tmp/cache$dirwithsources1.tgz --directory $targetdirwithsources1/"
 					tar -xzf /tmp/cache$dirwithsources1.tgz --directory $targetdirwithsources1/
 				else
 					# If both remote and local cache does not exists. Should not happen
@@ -811,10 +816,15 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 					datecache=0
 				fi
 			fi
-			echo `date +'%Y-%m-%d %H:%M:%S'`" datesource=$datesource datecache=$datecache"
+			
+			datecachets=$(date -d "${datecache}" +%s)
+			now=$(date +%s)
+			datecacheage=$(( (now - datecachets) / 86400 ))
+			
+			echo `date +'%Y-%m-%d %H:%M:%S'`" datesource (archive on NFS dir)=$datesource - datecache (archive on local dir)=$datecache - age of datecache=$datecacheage"
 
-			if [ $datecache -eq 0 -o $datesource -gt $datecache ]; then
-				echo `date +'%Y-%m-%d %H:%M:%S'`" Local cache does not exists or is too old, we recreate local cache"
+			if [ $datecache -eq 0 -o $datesource -gt $datecache -o "$datecacheage" -gt 7 ]; then
+				echo `date +'%Y-%m-%d %H:%M:%S'`" Local cache does not exists or is too old, we recreate local cache from NFS dir"
 				mkdir -p "/tmp/cache$dirwithsources2"
 				#echo "cp -r $dirwithsources2/. /tmp/cache$dirwithsources2"
 
@@ -836,11 +846,11 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 			fi 
 
 			if [[ -f /tmp/cache$dirwithsources2.tar.zst ]]; then
-				echo `date +'%Y-%m-%d %H:%M:%S'`" Local zst cache found. We use it with: tar -I zstd -xf /tmp/cache$dirwithsources2.tar.zst --directory $targetdirwithsources2/"
+				echo `date +'%Y-%m-%d %H:%M:%S'`" Local zst cache found for src 2. We use it with: tar -I zstd -xf /tmp/cache$dirwithsources2.tar.zst --directory $targetdirwithsources2/"
 				tar -I zstd -xf /tmp/cache$dirwithsources2.tar.zst --directory $targetdirwithsources2/
 			else
 				if [ -f /tmp/cache$dirwithsources2.tgz ]; then
-					echo `date +'%Y-%m-%d %H:%M:%S'`" Local tgz cache found. We use it with: tar -xzf /tmp/cache$dirwithsources2.tgz --directory $targetdirwithsources2/"
+					echo `date +'%Y-%m-%d %H:%M:%S'`" Local tgz cache found for src 2. We use it with: tar -xzf /tmp/cache$dirwithsources2.tgz --directory $targetdirwithsources2/"
 					tar -xzf /tmp/cache$dirwithsources2.tgz --directory $targetdirwithsources2/
 				else
 					# If both remote and local cache does not exists. Should not happen
@@ -873,10 +883,15 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 					datecache=0
 				fi
 			fi
-			echo `date +'%Y-%m-%d %H:%M:%S'`" datesource=$datesource datecache=$datecache"
+			
+			datecachets=$(date -d "${datecache}" +%s)
+			now=$(date +%s)
+			datecacheage=$(( (now - datecachets) / 86400 ))
+			
+			echo `date +'%Y-%m-%d %H:%M:%S'`" datesource (archive on NFS dir)=$datesource - datecache (archive on local dir)=$datecache - age of datecache=$datecacheage"
 
-			if [ $datecache -eq 0 -o $datesource -gt $datecache ]; then
-				echo `date +'%Y-%m-%d %H:%M:%S'`" Local cache does not exists or is too old, we recreate local cache"
+			if [ $datecache -eq 0 -o $datesource -gt $datecache -o "$datecacheage" -gt 7 ]; then
+				echo `date +'%Y-%m-%d %H:%M:%S'`" Local cache does not exists or is too old, we recreate local cache from NFS dir"
 				mkdir -p "/tmp/cache$dirwithsources3"
 				#echo "cp -r $dirwithsources3/. /tmp/cache$dirwithsources3"
 
@@ -898,11 +913,11 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 			fi 
 
 			if [[ -f /tmp/cache$dirwithsources3.tar.zst ]]; then
-				echo `date +'%Y-%m-%d %H:%M:%S'`" Local zst cache found. We use it with: tar -I zstd -xf /tmp/cache$dirwithsources3.tar.zst --directory $targetdirwithsources3/"
+				echo `date +'%Y-%m-%d %H:%M:%S'`" Local zst cache found for src 3. We use it with: tar -I zstd -xf /tmp/cache$dirwithsources3.tar.zst --directory $targetdirwithsources3/"
 				tar -I zstd -xf /tmp/cache$dirwithsources3.tar.zst --directory $targetdirwithsources3/
 			else
 				if [ -f /tmp/cache$dirwithsources3.tgz ]; then
-					echo `date +'%Y-%m-%d %H:%M:%S'`" Local tgz cache found. We use it with: tar -xzf /tmp/cache$dirwithsources3.tgz --directory $targetdirwithsources3/"
+					echo `date +'%Y-%m-%d %H:%M:%S'`" Local tgz cache found for src 3. We use it with: tar -xzf /tmp/cache$dirwithsources3.tgz --directory $targetdirwithsources3/"
 					tar -xzf /tmp/cache$dirwithsources3.tgz --directory $targetdirwithsources3/
 				else
 					# If both remote and local cache does not exists. Should not happen
@@ -1209,21 +1224,32 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 		else 
 			# No $CERTIFFORCUSTOMDOMAIN forced (no cert file was created initially), so we will generate one
 			export domainnameorcustomurl=`echo $customurl | cut -d "." -f 1`
-			# We must create it using letsencrypt if not yet created
+			
+			# TODO We must create it using letsencrypt if not yet created. NOTE: This is done in action "rename" (suspen_unsuspend.sh), not sure we must also do it  on deploy.
 			#if [[ ! -e /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$fqn.crt ]]; then
 					# Generate the letsencrypt certificate
 					
-					# certbot certonly --webroot -w $instancedir -d $customurl 
+					# certbot certonly -n -v --webroot -w $instancedir -d $customurl 
 					# create links					
 
 					# If links does not exists, we disable SSL
 					#SSLON="Off"
 			#fi
 			
-			export webCustomSSLCertificateCRT=$webSSLCertificateCRT
-			export webCustomSSLCertificateKEY=$webSSLCertificateKEY
-			export webCustomSSLCertificateIntermediate=$webSSLCertificateIntermediate
-			export CERTIFFORCUSTOMDOMAIN="with.sellyoursaas.com"
+			if [[ ! -e /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$fqn-custom.crt ]]; then
+				# If custom cert not found, we fallback on the wildcard one for server (it will generate a warning, but it will works and not hangs !)
+				export webCustomSSLCertificateCRT="/etc/apache2/$webSSLCertificateCRT"
+				export webCustomSSLCertificateKEY="/etc/apache2/$webSSLCertificateKEY"
+				export webCustomSSLCertificateIntermediate="/etc/apache2/$webSSLCertificateIntermediate"
+				export CERTIFFORCUSTOMDOMAIN="with.sellyoursaas.com"
+			else
+				# We will use the custom cert file
+				export webCustomSSLCertificateCRT=/home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$fqn-custom.crt
+				export webCustomSSLCertificateKEY=/home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$fqn-custom.key
+				export webCustomSSLCertificateIntermediate=/home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$fqn-custom-intermediate.crt
+				export CERTIFFORCUSTOMDOMAIN="$fqn-custom"
+			fi
+			echo "We will use the certificate file webCustomSSLCertificateCRT=$webCustomSSLCertificateCRT (CERTIFFORCUSTOMDOMAIN=$CERTIFFORCUSTOMDOMAIN)"
 		fi
 
 		# If the certificate file is not found, we disable SSL
@@ -1284,7 +1310,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 	fi
 	
 	
-	# Deploy also the php fpm pool file from the scripts/templates/osuxxx.conf
+	# Deploy also the php fpm pool file from the scripts/templates/osuxxx.template
 	# A link will also be created into /etc/php/$phpversion/fpm/pool.d/$fqn.conf to this fpm pool file $fqn.conf
 	export phpfpmconf="/etc/php/$phpversion/fpm/pool.d/sellyoursaas/$fqn.phpfpm.conf"
 	export phpfpmservicename="sellyoursaas-php$phpversion-fpm-$fqn.service"
@@ -1632,11 +1658,11 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 	echo "Do a dump of database $dbname - may fails if already removed"
 	mkdir -p $archivedir/$osusername
 	if [[ -x /usr/bin/zstd && "x$usecompressformatforarchive" == "xzstd" ]]; then
-		echo "$MYSQLDUMP --no-tablespaces -h $dbserverhost -P $dbserverport -u$dbadminuser -pXXXXXX $dbname | zstd -z -9 -q > $archivedir/$osusername/dump.$dbname.$nowlog.sql.zst"
-		$MYSQLDUMP --no-tablespaces -h $dbserverhost -P $dbserverport -u$dbadminuser -p$dbadminpass $dbname | zstd -z -9 -q > "$archivedir/$osusername/dump.$dbname.$nowlog.sql.zst"
+		echo "$MYSQLDUMP --no-tablespaces -h $dbserverhost -P $dbserverport -u$dbadminuser -pXXXXXX $dbname | zstd -z -9 -q > $archivedir/$osusername/dump.$dbname.$nowfile.sql.zst"
+		$MYSQLDUMP --no-tablespaces -h $dbserverhost -P $dbserverport -u$dbadminuser -p$dbadminpass $dbname | zstd -z -9 -q > "$archivedir/$osusername/dump.$dbname.$nowfile.sql.zst"
 	else
-		echo "$MYSQLDUMP --no-tablespaces -h $dbserverhost -P $dbserverport -u$dbadminuser -pXXXXXX $dbname | gzip > $archivedir/$osusername/dump.$dbname.$nowlog.sql.gz"
-		$MYSQLDUMP --no-tablespaces -h $dbserverhost -P $dbserverport -u$dbadminuser -p$dbadminpass $dbname | gzip > "$archivedir/$osusername/dump.$dbname.$nowlog.sql.gz"
+		echo "$MYSQLDUMP --no-tablespaces -h $dbserverhost -P $dbserverport -u$dbadminuser -pXXXXXX $dbname | gzip > $archivedir/$osusername/dump.$dbname.$nowfile.sql.gz"
+		$MYSQLDUMP --no-tablespaces -h $dbserverhost -P $dbserverport -u$dbadminuser -p$dbadminpass $dbname | gzip > "$archivedir/$osusername/dump.$dbname.$nowfile.sql.gz"
 	fi
 
 	if [[ "x$?" == "x0" ]]; then

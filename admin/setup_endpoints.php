@@ -55,7 +55,14 @@ if (! $res && file_exists("../../../main.inc.php")) {
 if (! $res) {
 	die("Include of main fails");
 }
-
+/**
+ * The main.inc.php has been included so the following variable are now defined:
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ * @var User $user
+ */
 require_once DOL_DOCUMENT_ROOT."/core/lib/admin.lib.php";
 require_once DOL_DOCUMENT_ROOT."/core/lib/files.lib.php";
 require_once DOL_DOCUMENT_ROOT."/core/lib/images.lib.php";
@@ -109,6 +116,9 @@ foreach ($tmpservices as $key => $tmpservice) {
 	}
 	$arrayofsuffixfound[$tmpservice] = $suffix;
 }
+if (empty($arrayofsuffixfound)) {
+	$arrayofsuffixfound[] = '';
+}
 
 
 /*
@@ -154,7 +164,7 @@ print '<input type="hidden" name="action" value="set">';
 print '<div class="div-table-responsive-no-min">'; // You can use div-table-responsive-no-min if you dont need reserved height for your table
 print '<table class="noborder centpercent">';
 print '<tr class="liste_titre">';
-print '<td>'.$langs->trans("Parameters").'</td><td>'.$langs->trans("Value").'</td>';
+print '<td>'.$langs->trans("Parameters").'</td><td></td>';
 print '<td><div class="float">'.$langs->trans("Examples").'</div><div class="floatright"><input type="submit" class="button buttongen" value="'.$langs->trans("Save").'"></div></td>';
 print "</tr>\n";
 

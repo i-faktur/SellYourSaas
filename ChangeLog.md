@@ -3,6 +3,14 @@
 
 ## Unreleased
 
+* NEW Add warning on support page if contact info are not complete
+* NEW Add badge with number of deployment server on tab title of deployment servers.
+* NEW Add the tab for histori of events info on a deployment server card.
+* NEW Options to disable the apt unattended-upgrade. Such silent upgrade changes system files on disk making fight against intrusion detection more difficult.
+* NEW Can for a server on a service.
+* NEW Search on firstname and last name of thirdparty with global search on contract.  
+* NEW Full compatibility with PHP 8.4 (need dolibarr v22)
+* NEW Can set a list of service on registration url to choose which package to install during registration
 * NEW Add hidden option SELLYOURSAAS_EMAILORURL_TO_WARN to set another email or contact to contact
 * NEW Search also on sellyoursaas firstname and lastname when using the quick filter on thirdparty
 * NEW Can use an url instead of email to warn about a trouble on registration
@@ -10,8 +18,8 @@
 * NEW Can defined a whitelist of emails for registration (for special emails where MX record detection fails)
 * NEW For payment mode credit transfer, an email is sent at invoice validation
 * NEW Can filter on instance mask when selecting target of email.
-* NEW Add info on ducs command
-* NEW Support discount codes with a number part (MYDISCOUNTCODE-123)
+* NEW Add info on how to use ducs command in backup tab.
+* NEW Support discount codes with a number part (MYDISCOUNTCODE-123) acting as MYDISCOUNTCODE.
 * NEW Add hostname property in list of deployment servers  
 * NEW Add option SELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL
 * NEW More protection on public registration
@@ -28,7 +36,6 @@
 * NEW On payment by card, the last 4 numbers are saved into the field "numero" of the payment in database.
 * NEW Can force permission to see SSH/Mysql access per instance.
 * NEW Show the possible substitutions keys for the helpdesk url into setup.
-* SEC When using ssh, a user can't see the OS and package information.
 * NEW Support emails with + inside
 * NEW Accept emojis in email templates
 * NEW No need to reenter the 2 passwords when an instance creation failed.
@@ -40,6 +47,8 @@
 * FIX Redirection instances must not appear in the count of backuped instances.
 * FIX letsencrypt for wildcard are now using 2 passes and needs 2 TXT entry in DNS.
 * FIX Debug master_move_instance.php - Price of old instance is kept/reused.
+* FIX code for email template to use to send email for credit transfer payment.
+* SEC When using ssh, a user can't see the OS and package information.
 
 
 ## 2.1

@@ -27,7 +27,7 @@ if (empty($conf) || ! is_object($conf)) {
 
 $sellyoursaasname = getDolGlobalString('SELLYOURSAAS_NAME');
 if (! empty($mythirdpartyaccount->array_options['options_domain_registration_page'])
-	&& $mythirdpartyaccount->array_options['options_domain_registration_page'] != $conf->global->SELLYOURSAAS_MAIN_DOMAIN_NAME) {
+	&& $mythirdpartyaccount->array_options['options_domain_registration_page'] != getDolGlobalString('SELLYOURSAAS_MAIN_DOMAIN_NAME')) {
 	$newnamekey = 'SELLYOURSAAS_NAME_FORDOMAIN-'.$mythirdpartyaccount->array_options['options_domain_registration_page'];
 	if (getDolGlobalString($newnamekey)) {
 		$sellyoursaasname = getDolGlobalString($newnamekey);
@@ -106,7 +106,7 @@ print '
 						print '<div class="form-group">
 	                                  <label>'.$langs->trans("VATIntra").'</label> ';
 						if (! empty($mythirdpartyaccount->tva_assuj) && empty($mythirdpartyaccount->tva_intra)) {
-							print img_warning($langs->trans("Mandatory"), 'class="hideifnonassuj"');
+							print img_warning($langs->trans("Mandatory"), '', 'hideifnonassuj');
 						}
 
 						$placeholderforvat='';
@@ -196,9 +196,12 @@ print '<script type="text/javascript" language="javascript">
 		jQuery(document).ready(function() {
 			jQuery("#vatassuj").click(function() {
 				console.log("Click on vatassuj "+jQuery("#vatassuj").is(":checked"));
-				jQuery(".hideifnonassuj").hide();
-				jQuery(".hideifnonassuj").show();
-				jQuery("#vatnumber").focus();
+				if (jQuery("#vatassuj").is(":checked")) {
+					jQuery(".hideifnonassuj").show();
+					jQuery("#vatnumber").focus();
+				} else {
+					jQuery(".hideifnonassuj").hide();
+				}
 			});
 		});
 		</script>';
@@ -346,9 +349,9 @@ if (! GETPOST('deleteaccount')) {
 				                <p class="opacitymedium error" style="padding: 5px">
 				                    ';
 if (($nbofinstancesinprogressreseller + $nbofinstancesdonereseller + $nbofinstancessuspendedreseller) > 0) {
-	print $langs->trans("ClosingAccountResellerNotPossible", ($nbofinstancesinprogressreseller + $nbofinstancesdonereseller + $nbofinstancessuspendedreseller), $langs->transnoentities("MyInstances"), $langs->transnoentities("DangerZone")).'<br>';
+	print $langs->trans("ClosingAccountResellerNotPossible", ($nbofinstancesinprogressreseller + $nbofinstancesdonereseller + $nbofinstancessuspendedreseller), $langs->transnoentities("MyInstances"), $langs->transnoentities("CancelInstance")).'<br>';
 } elseif (($nbofinstancesinprogress + $nbofinstancesdone + $nbofinstancessuspended) > 0) {
-	print $langs->trans("ClosingAccountNotPossible", ($nbofinstancesinprogress + $nbofinstancesdone + $nbofinstancessuspended), $langs->transnoentities("MyInstances"), $langs->transnoentities("DangerZone")).'<br>';
+	print $langs->trans("ClosingAccountNotPossible", ($nbofinstancesinprogress + $nbofinstancesdone + $nbofinstancessuspended), $langs->transnoentities("MyInstances"), $langs->transnoentities("CancelInstance")).'<br>';
 } elseif (getDolGlobalString('SELLYOURSAAS_DISABLE_NEW_INSTANCES')) {
 	print '<!-- ClosingAccountIsTemporarlyDisabledTryLater -->'."\n";
 	print $langs->trans("ClosingAccountIsTemporarlyDisabledTryLater").'<br>';

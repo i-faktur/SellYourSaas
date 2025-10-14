@@ -106,19 +106,19 @@ if ($langs->defaultlang == 'en_US') {
 }
 
 
-$partner=GETPOST('partner', 'int');
-$partnerkey=GETPOST('partnerkey', 'alpha');
-$plan=GETPOST('plan', 'alpha');
-$sldAndSubdomain=strtolower(GETPOST('sldAndSubdomain', 'alpha'));
-$tldid=GETPOST('tldid', 'alpha');
+$partner = GETPOST('partner', 'int');
+$partnerkey = GETPOST('partnerkey', 'alpha');
+$plan = GETPOST('plan', 'alpha');
+$sldAndSubdomain = strtolower(GETPOST('sldAndSubdomain', 'alpha'));
+$tldid = GETPOST('tldid', 'alpha');
 $origin = GETPOST('origin', 'aZ09');
 
-$socid=GETPOST('socid', 'int') ? GETPOST('socid', 'int') : GETPOST('reusesocid', 'int');
+$socid = GETPOST('socid', 'int') ? GETPOST('socid', 'int') : GETPOST('reusesocid', 'int');
 $reusecontractid = GETPOST('reusecontractid', 'int');
 $reusesocid = GETPOST('reusesocid', 'int');
 $fromsocid = GETPOST('fromsocid', 'int');
 $disablecustomeremail = GETPOST('disablecustomeremail', 'alpha');
-$extcss=GETPOST('extcss', 'alpha');
+$extcss = GETPOST('extcss', 'alpha');
 if (empty($extcss)) {
 	$extcss = getDolGlobalString('SELLYOURSAAS_EXTCSS', 'dist/css/myaccount.css');
 } elseif ($extcss == 'generic') {
@@ -130,9 +130,16 @@ if (empty($extcss)) {
 include_once DOL_DOCUMENT_ROOT.'/core/lib/geturl.lib.php';
 $domainname = getDomainFromURL($_SERVER["SERVER_NAME"], 1);
 
-$productid=GETPOST('service', 'int');
-$productref=(GETPOST('productref', 'alpha') ? GETPOST('productref', 'alpha') : '');
+$productid = GETPOST('service', 'int');
+$productref = (GETPOST('productref', 'alpha') ? GETPOST('productref', 'alpha') : '');
+
 $defaultproduct = '';
+
+$planarray = preg_split('/(,|;)/', $plan);
+if (!empty($planarray[1])) {
+	$productref = 'array';
+}
+
 if (empty($productid) && empty($productref)) {
 	$productref = $plan;
 	if (empty($productref)) {
@@ -162,9 +169,7 @@ if (empty($productid) && empty($productref)) {
 		//print $_SERVER["SERVER_NAME"].' - '.$sqlproducts;
 		$resqlproducts = $db->query($sqlproducts);
 		if ($resqlproducts) {
-			$num = $db->num_rows($resqlproducts);
-
-			$tmpprod = new Product($db);
+			//$num = $db->num_rows($resqlproducts);
 			$obj = $db->fetch_object($resqlproducts);
 			if ($obj) {
 				$productref = $obj->ref;
@@ -178,19 +183,22 @@ if (empty($productid) && empty($productref)) {
 $tmpproduct = new Product($db);
 $tmppackage = new Packages($db);
 
+$productonlyserver = '';
+
 // Load main product
-if ($productref != 'none') {
+if ($productref != 'none' && $productref != 'array') {
 	$result = $tmpproduct->fetch($productid, $productref);
 	if (empty($tmpproduct->id)) {
-		print 'Service/Plan (Product id / ref) '.$productid.' / '.$productref.' was not found.';
+		print 'Service/Plan (Product id = '.$productid.' / ref = '.$productref.') was not found.';
 		exit;
 	}
 	// We have the main product, we are searching the package
 	if (empty($tmpproduct->array_options['options_package'])) {
-		print 'Service/Plan (Product id / ref) '.$tmpproduct->id.' / '.$productref.' has no package defined on it.';
+		print 'Service/Plan (Product id = '.$tmpproduct->id.' / ref = '.$productref.') has no package defined on it.';
 		exit;
 	}
 	$productref = $tmpproduct->ref;
+	$productonlyserver = $tmpproduct->array_options['options_onlyserver'];
 
 	if (empty($tmpproduct->status)) {
 		print "Product '".$productref."' is not on sale.";
@@ -285,9 +293,9 @@ if ($favicon) {
 	}
 	$head.='<link rel="icon" href="'.$href.'">'."\n";
 }
-$head .= '<!-- Bootstrap core CSS -->';
-$head .= '<link href="dist/css/bootstrap.css" type="text/css" rel="stylesheet">';
-$head .= '<link href="'.$extcss.'" type="text/css" rel="stylesheet">';
+$head .= '<!-- Bootstrap core CSS -->'."\n";
+$head .= '<link href="dist/css/bootstrap.css" type="text/css" rel="stylesheet">'."\n";
+$head .= '<link href="'.$extcss.'" type="text/css" rel="stylesheet">'."\n";
 
 if (getDolGlobalString('SELLYOURSAAS_GOOGLE_RECAPTCHA_ON')) {
 	$head .= '<script src="https://www.google.com/recaptcha/api.js"></script>';
@@ -395,7 +403,7 @@ if ($reshook == 0) {
 			$constlogoalt = 'SELLYOURSAAS_LOGO_'.str_replace('.', '_', strtoupper($sellyoursaasdomain));
 			$constlogosmallalt = 'SELLYOURSAAS_LOGO_SMALL_'.str_replace('.', '_', strtoupper($sellyoursaasdomain));
 
-			//var_dump($sellyoursaasdomain.' '.$constlogoalt.' '.$conf->global->$constlogoalt);exit;
+			//var_dump($sellyoursaasdomain.' '.$constlogoalt.' '.getDolGlobalString($constlogoalt));exit;
 			if (getDolGlobalString($constlogoalt)) {
 				$constlogo=$constlogoalt;
 				$constlogosmall=$constlogosmallalt;
@@ -511,9 +519,13 @@ if ($reshook == 0) {
 				print '</div>'."\n";
 				print '</div>'."\n";
 			}
+
+			$selectnametoselectplan = 'planselect';
+			$formname = 'formregister';
+
 			?>
 
-		  <form action="register_instance.php" name="formregister" method="post" id="formregister">
+		  <form action="register_instance.php" name="<?php echo $formname; ?>" id="<?php echo $formname; ?>" method="post">
 			<div class="form-content">
 			  <input type="hidden" name="token" value="<?php echo newToken(); ?>" />
 			  <input type="hidden" name="forcesubdomain" value="<?php echo dol_escape_htmltag(GETPOST('forcesubdomain', 'alpha')); ?>" />
@@ -534,8 +546,155 @@ if ($reshook == 0) {
 			  <input type="hidden" name="disablecustomeremail" value="<?php echo dol_escape_htmltag($disablecustomeremail); ?>" />
 			  <!-- _SESSION['dol_loginsellyoursaas'] = <?php echo(empty($_SESSION['dol_loginsellyoursaas']) ? '' : $_SESSION['dol_loginsellyoursaas']); ?> -->
 
-			  <section id="enterUserAccountDetails">
+			<?php
+			if ($productref == 'array') {
+				print '<section id="enterPlanPackage">';
+				print '<div class="fld select-plan required">';
+				print '<label class="control-label" for="plan">'.$langs->trans("ChooseAProductForYourApplication").'</label>';
+				print '<div class="control">';
 
+				print '<select class="minwidth400" required="required" id="'.$selectnametoselectplan.'" name="plan">';
+				print '<option value="">&nbsp;</option>';
+				foreach ($planarray as $tmpkey => $tmpplanref) {
+					$tmpplan = new Product($db);
+					$tmpplan->fetch(0, $tmpplanref, '', '', 1, 1);
+					print '<option value="'.$tmpplan->ref.'" data-id="'.$tmpplan->id.'" data-ref="'.$tmpplanref.'" data-onlyserver="'.$tmpplan->array_options['options_onlyserver'].'">';
+					print empty($tmpplan->multilangs[$langs->defaultlang]['label']) ? $tmpplanref : $tmpplan->multilangs[$langs->defaultlang]['label'];
+					print '</option>';
+				}
+				print '</select>';
+
+				print '</div>';
+				print '</div>';
+				print '</section><br>';
+				print ajax_combobox("planselect");
+
+				// Add dynamic code to disable/enable the submit button
+				print '<script>
+				$(document).ready(function() {
+					var initialValueSelectedInTldid = jQuery("#tldid").val();
+					console.log("Initial value selected in tldid = "+initialValueSelectedInTldid);
+
+				    $("#'.$selectnametoselectplan.'").change(function() {
+						var pid = jQuery("#'.$selectnametoselectplan.' option:selected").val();
+						console.log("We update a product/service/plan field by selecting product id = "+pid);
+
+						var selectedOption = this.options[this.selectedIndex];
+						var value = selectedOption.value;
+    					var dataOnlyServer = selectedOption.getAttribute("data-onlyserver");
+
+						/* Now disable according to onlyserver */
+						console.log("Now, disable servers according to onlyserver");
+						if (dataOnlyServer) {
+							/* We also refresh the combo list tldid */
+							let arrayDataOnlyServer = dataOnlyServer.split(",");
+							console.log("arrayDataOnlyServer="+arrayDataOnlyServer);
+
+							jQuery("#tldid option").each(function() {
+								var valueOfSubDomain = $(this).val();
+        						var text = $(this).text();
+								var newSelectedInTldid = initialValueSelectedInTldid;
+								/* console.log("Process line for value="+valueOfSubDomain+" text="+text); */
+
+								var qualified = 0;
+								arrayDataOnlyServer.forEach(function(onlyServer) {
+		        					if (valueOfSubDomain.includes(onlyServer)) {
+		            					/* console.log("This subdomain line match the rule "+onlyServer); */
+										qualified = 1;
+		        					}
+								});
+
+								mustChangeSelectedValue = 0;
+								initialValueIsQualified = 0;
+								currentSelectedValue = jQuery("#tldid").val();
+
+								if (valueOfSubDomain) {
+									if (qualified) {
+										console.log("The subdomain line "+valueOfSubDomain+" is qualified");
+
+										jQuery("#tldid option[value=\'" + valueOfSubDomain + "\']").prop("disabled", false);
+										jQuery("#tldid").val(valueOfSubDomain);
+
+										if (valueOfSubDomain == initialValueSelectedInTldid) {
+											initialValueIsQualified = 1;
+										}
+										newSelectedInTldid = valueOfSubDomain;
+									} else {
+										console.log("The subdomain line "+valueOfSubDomain+" is NOT qualified");
+
+										jQuery("#tldid option[value=\'" + valueOfSubDomain + "\']").prop("disabled", true);
+
+										if (valueOfSubDomain == currentSelectedValue) {
+											mustChangeSelectedValue = 1;
+										}
+									}
+								}
+
+								if (mustChangeSelectedValue) {	/* select a new qualified value */
+									if (initialValueIsQualified) {
+										newSelectedInTldid = initialValueSelectedInTldid;
+									}
+
+									jQuery("#tldid").val(newSelectedInTldid);
+								}
+							});
+						} else {
+							/* We enable all choices in combo list tldid */
+							jQuery("#tldid option").each(function() {
+								var valueOfSubDomain = $(this).val();
+        						var text = $(this).text();
+
+								if (valueOfSubDomain) {
+									console.log("The subdomain line "+valueOfSubDomain+" is qualified");
+									jQuery("#tldid option[value=\'" + valueOfSubDomain + "\']").prop("disabled", false);
+									jQuery("#tldid").val(initialValueSelectedInTldid);
+								}
+							});
+						}
+
+						';
+
+						if (getDolGlobalString('SELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL')) {
+							print ' jQuery("#tldid").val("");';
+						}
+
+						print '
+
+						jQuery("#tldid").trigger("change.select2");
+
+
+						console.log("We update a mandatory field");
+						setButtonDisabled();
+				    });
+
+					jQuery("#'.$formname.'").on("change keyup", "#username", function() {
+						console.log("We update a mandatory field");
+						setButtonDisabled();
+					});
+					jQuery("#'.$formname.'").on("change keyup", "#orgName", function() {
+						console.log("We update a mandatory field");
+						setButtonDisabled();
+					});
+					jQuery("#'.$formname.'").on("change keyup", "#sldAndSubdomain", function() {
+						console.log("We update a mandatory field");
+						setButtonDisabled();
+					});
+
+					function setButtonDisabled() {
+				        if (jQuery("#'.$selectnametoselectplan.'").val() && jQuery("#username").val() && jQuery("#orgName").val() && jQuery("#sldAndSubdomain").val()) {
+				            $(\'#newinstance\').prop(\'disabled\', false);
+				        } else {
+				            $(\'#newinstance\').prop(\'disabled\', true);
+				        }
+					}
+				});
+
+				</script>
+				';
+			}
+			?>
+
+			  <section id="enterUserAccountDetails">
 
 			<?php
 			$disabled='';
@@ -568,9 +727,9 @@ if ($reshook == 0) {
 			if (empty($mythirdparty->id)) {
 				?>
 			<div class="control-group  required">
-				<label class="control-label" for="username" trans="1"><span class="fas fa-at opacityhigh"></span> <?php echo $langs->trans("Email") ?></label>
+				<label class="control-label" for="username"><span class="fas fa-at opacityhigh"></span> <?php echo $langs->trans("Email") ?></label>
 				<div class="controls">
-					<input type="text"<?php echo $disabled; ?> name="username" maxlength="255" autofocus value="<?php echo GETPOST('username', 'alpha'); ?>" required="" id="username" />
+					<input type="text"<?php echo $disabled; ?> name="username" id="username" autocomplete="true" spellcheck="false" maxlength="255" autofocus value="<?php echo GETPOST('username', 'alpha'); ?>" required="required" />
 
 				</div>
 			</div>
@@ -578,18 +737,17 @@ if ($reshook == 0) {
 			<div class="group">
 				<div class="horizontal-fld">
 					<div class="control-group  required">
-						<label class="control-label" for="orgName"
-							   trans="1"><span class="fa fa-building opacityhigh"></span> <?php echo $langs->trans("NameOfCompany") ?></label>
+						<label class="control-label" for="orgName"><span class="fa fa-building opacityhigh"></span> <?php echo $langs->trans("NameOfCompany") ?></label>
 						<div class="controls">
-							<input type="text"<?php echo $disabled; ?> name="orgName" maxlength="250"
-								   value="<?php echo GETPOST('orgName', 'alpha'); ?>" required="" id="orgName"/>
+							<input type="text"<?php echo $disabled; ?> name="orgName" id="orgName" spellcheck="false" maxlength="250"
+								   value="<?php echo GETPOST('orgName', 'alpha'); ?>" required="required" id="orgName"/>
 						</div>
 					</div>
 				</div>
-				<?php if (! getDolGlobalInt('SELLYOURSAAS_REGISTER_HIDE_PHONE')) { ?>
+				<?php if (!getDolGlobalInt('SELLYOURSAAS_REGISTER_HIDE_PHONE')) { ?>
 				<div class="horizontal-fld">
 					<div class='control-group'>
-						<label class='control-label' for='phone' trans='1'><span class="fa fa-phone opacityhigh"></span> <?php echo $langs->trans('Phone') ?></label>
+						<label class='control-label' for='phone' spellcheck="false" trans='1'><span class="fa fa-phone opacityhigh"></span> <?php echo $langs->trans('Phone') ?></label>
 						<div class="controls">
 							<input type="text"<?php echo $disabled; ?> name="phone" maxlength="250"
 								   value="<?php echo GETPOST('phone', 'alpha'); ?>" id="phone"/>
@@ -618,10 +776,10 @@ if ($reshook == 0) {
 				<div class="horizontal-fld">
 
 				<div class="control-group  required">
-					<label class="control-label" for="password" trans="1"><span class="fa fa-lock opacityhigh"></span> <?php echo $langs->trans("Password") ?></label>
+					<label class="control-label" for="password"><span class="fa fa-lock opacityhigh"></span> <?php echo $langs->trans("Password") ?></label>
 					<div class="controls">
 
-						<input<?php echo $disabled; ?> title="<?php echo dol_escape_htmltag($langs->trans("RuleForPassword", 8)) ?>" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}" name="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password" spellcheck="false" autocapitalize="off" value="<?php echo $tmppassinform; ?>" />
+						<input<?php echo $disabled; ?> title="<?php echo dol_escape_htmltag($langs->trans("RuleForPassword", 8)) ?>" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}" id="password" name="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password" spellcheck="false" autocapitalize="off" value="<?php echo $tmppassinform; ?>" />
 
 					</div>
 				</div>
@@ -629,9 +787,9 @@ if ($reshook == 0) {
 				</div>
 				<div class="horizontal-fld">
 				  <div class="control-group required">
-					<label class="control-label" for="password2" trans="1"><span class="fa fa-lock opacityhigh"></span> <?php echo $langs->trans("PasswordRetype") ?></label>
+					<label class="control-label" for="password2"><span class="fa fa-lock opacityhigh"></span> <?php echo $langs->trans("PasswordRetype") ?></label>
 					<div class="controls">
-					  <input<?php echo $disabled; ?> title="<?php echo dol_escape_htmltag($langs->trans("RuleForPassword", 8)) ?>" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}" name="password2" type="password" minlength="8" maxlength="128" required autocomplete="new-password" spellcheck="false" autocapitalize="off" value="<?php echo $tmppassinform2; ?>" />
+					  <input<?php echo $disabled; ?> title="<?php echo dol_escape_htmltag($langs->trans("RuleForPassword", 8)) ?>" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}" id="password2" name="password2" type="password" minlength="8" maxlength="128" required autocomplete="new-password" spellcheck="false" autocapitalize="off" value="<?php echo $tmppassinform2; ?>" />
 					</div>
 				  </div>
 				</div>
@@ -644,7 +802,7 @@ if ($reshook == 0) {
 				?>
 
 			<div class="control-group  ">
-				<label class="control-label" for="country"><span class="fa fa-globe opacityhigh"></span> <?php echo $langs->trans("Country") ?></label>
+				<label class="control-label" for="selectcountry"><span class="fa fa-globe opacityhigh"></span> <?php echo $langs->trans("Country") ?></label>
 				<div class="controls">
 				<?php
 				$countryuser=strtoupper(dolGetCountryCodeFromIp(getUserRemoteIP()));
@@ -671,19 +829,21 @@ if ($reshook == 0) {
 				if (empty($reusecontractid)) {
 					print '<br>';
 				} else {
-					print '<hr/>';
-				} ?>
+					print '<hr>';
+				}
+			?>
 
 			  <!-- Selection of domain to create instance -->
 			  <section id="selectDomain">
 				<div class="fld select-domain required">
-				  <label trans="1"><?php echo $langs->trans("ChooseANameForYourApplication") ?></label>
+				  <label><?php echo $langs->trans("ChooseANameForYourApplication") ?></label>
 				  <div class="linked-flds">
 					  <span class="nowraponall sldAndSubdomaininput">
 					<span class="opacitymedium">https://</span>
-					<input<?php echo $disabled; ?> class="sldAndSubdomain" type="text" name="sldAndSubdomain" id="sldAndSubdomain" value="<?php echo $sldAndSubdomain; ?>" maxlength="29" required="" />
+					<input<?php echo $disabled; ?> class="sldAndSubdomain" type="text" spellcheck="false" name="sldAndSubdomain" id="sldAndSubdomain" value="<?php echo $sldAndSubdomain; ?>" maxlength="29" required="" />
 					</span>
-					<select<?php echo $disabled; ?> name="tldid" id="tldid" placeholder="aaa">
+
+					<select name="tldid" id="tldid"<?php echo ' '.$disabled; ?>>
 						<?php
 						// SERVER_NAME here is myaccount.mydomain.com (we can exploit only the part mydomain.com)
 						$domainname = getDomainFromURL($_SERVER["SERVER_NAME"], 1);
@@ -695,7 +855,7 @@ if ($reshook == 0) {
 							$listofdomain = explode(',', getDolGlobalString('SELLYOURSAAS_SUB_DOMAIN_NAMES'));   // This is list of all sub domains to show into combo list
 						} else {
 							$staticdeploymentserver = new Deploymentserver($db);
-							$listofdomain = $staticdeploymentserver->fetchAllDomains('', '', 1000, 0, '', 'AND', 1);
+							$listofdomain = $staticdeploymentserver->fetchAllDomains('', '', 1000, 0, '', 'AND', 1);	// Return array
 						}
 
 						// Get the country of the user
@@ -714,7 +874,7 @@ if ($reshook == 0) {
 						//$conf->global->SELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL = 1;
 
 						foreach ($listofdomain as $val) {
-							$newval = $val['fullstring'];
+							$newval = (is_array($val) ? $val['fullstring'] : $val);
 
 							if (empty($newval)) {
 								continue;
@@ -722,7 +882,13 @@ if ($reshook == 0) {
 
 							$reg = array();
 							if (preg_match('/:(.+)$/', $newval, $reg)) {      // If this domain must be shown only if domain match
-								$newval = preg_replace('/:.*$/', '', $newval);	// the part before the : that we use to compare the forcesubdomain parameter.
+								$tmpnewval = explode(':', $newval);
+								$newval = $tmpnewval[0];        // the part before the : that we use to compare the forcesubdomain parameter.
+								if (!empty($tmpnewval[1]) && $tmpnewval[1] == 'closed') {
+									if ($newval != GETPOST('forcesubdomain', 'alpha') || !in_array(getUserRemoteIP(), explode(',', getDolGlobalString('SELLYOURSAAS_DISABLE_NEW_INSTANCES_EXCEPT_IP')))) {
+										continue;
+									}
+								}
 
 								$domainqualified = false;
 								$tmpdomains = explode('+', $reg[1]);
@@ -740,7 +906,8 @@ if ($reshook == 0) {
 							// $newval is subdomain (with.mysaasdomainname.com for example)
 
 							// Restriction defined on package
-							if (! empty($tmppackage->restrict_domains)) {   // There is a restriction on some domains for this package
+							// If $tmppackage is defined, check if there is a restriction on some domains for this package (if not, $tmppackage->restrict_domains is empty and no restriction is done here)
+							if (! empty($tmppackage->restrict_domains)) {
 								$restrictfound = false;
 								$tmparray=explode(',', $tmppackage->restrict_domains);
 								foreach ($tmparray as $tmprestrictdomain) {
@@ -756,12 +923,28 @@ if ($reshook == 0) {
 								}
 							}
 
+							// Restriction on onlyserver of the service
+							// If $productonlyserver is set (when we are on a given service, if not, $productonlyserver is empty and no restriction is done here)
+							if ($productonlyserver) {
+								// Check if domain is allowed by $productref
+								$arrayofonlyserver = explode(',', $productonlyserver);
+								$qualifiedbyonlyserver = false;
+								foreach($arrayofonlyserver as $onlyserver) {
+									//var_dump($onlyserver.' '.$newval);
+									if (preg_match('/'.$onlyserver.'/', $newval)) {
+										$qualifiedbyonlyserver = 1;
+										break;
+									}
+								}
+								if (!$qualifiedbyonlyserver) {
+									print '<!-- '.$newval.' disabled. There is a restriction on onlyserver to use only '.$productonlyserver.' -->';
+									continue;   // The subdomain in SELLYOURSAAS_SUB_DOMAIN_NAMES has not a domain inside restrictlist of package, so we discard it.
+								}
+							}
+
 							// Restriction on country
 							if (getDolGlobalString('SELLYOURSAAS_OBJECT_DEPLOYMENT_SERVER_MIGRATION')) {
 								$servercountriesstring = $val['servercountries'];
-								//var_dump($servercountries);
-								//$deploymentserver = new Deploymentserver($db);
-								//$deploymentserver->fetch(0, $newval);
 
 								if (!empty($servercountriesstring)) {
 									$servercountries = explode(',', $servercountriesstring);
@@ -939,7 +1122,7 @@ if ($reshook == 0) {
 			}
 			if ($urlfortermofuse) {
 				?>
-			  <p class="termandcondition small center" style="color:#444; margin:10px 3px;" trans="1"><?php echo $langs->trans("WhenRegisteringYouAccept", $urlfortermofuse) ?></p>
+			  <p class="termandcondition small center" style="color:#444; margin:10px 3px;"><?php echo $langs->trans("WhenRegisteringYouAccept", $urlfortermofuse) ?></p>
 				<?php
 			}
 			?>
@@ -950,6 +1133,11 @@ if ($reshook == 0) {
 				if (getDolGlobalString('SELLYOURSAAS_GOOGLE_RECAPTCHA_ON')) {
 					$paramrecaptcha = ' data-sitekey="'.getDolGlobalString('SELLYOURSAAS_GOOGLE_RECAPTCHA_SITE_KEY').'" data-callback="onSubmitCallBackForReCaptcha" data-action="submit"';
 					//$paramrecaptcha = ' data-sitekey="'.getDolGlobalString('SELLYOURSAAS_GOOGLE_RECAPTCHA_SITE_KEY').'" data-action="submit"';
+				}
+
+				if ($productref == 'array') {
+					$disabled = ' disabled="disabled" title="'.$langs->trans("ChooseAProductForYourApplication").'"';
+
 				}
 
 				if ($productref != 'none') {

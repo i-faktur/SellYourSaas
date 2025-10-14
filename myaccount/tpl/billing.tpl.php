@@ -21,6 +21,15 @@ if (empty($conf) || ! is_object($conf)) {
 	exit(1);
 }
 
+/**
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ *
+ * @var Societe $mythirdpartyaccount
+ * @var int $nowmonth
+ * @var int $nowyear
+ */
 ?>
 <!-- BEGIN PHP TEMPLATE billing.tpl.php -->
 <?php
@@ -60,7 +69,7 @@ print '
 if (getDolGlobalString('SELLYOURSAAS_DOLICLOUD_ON') && $mythirdpartyaccount->array_options['options_source'] == 'MIGRATIONV1') {
 	$sellyoursaasemail = getDolGlobalString('SELLYOURSAAS_MAIN_EMAIL');
 	if (! empty($mythirdpartyaccount->array_options['options_domain_registration_page'])
-		&& $mythirdpartyaccount->array_options['options_domain_registration_page'] != $conf->global->SELLYOURSAAS_MAIN_DOMAIN_NAME) {
+		&& $mythirdpartyaccount->array_options['options_domain_registration_page'] != getDolGlobalString('SELLYOURSAAS_MAIN_DOMAIN_NAME')) {
 		$newnamekey = 'SELLYOURSAAS_MAIN_EMAIL_FORDOMAIN-'.$mythirdpartyaccount->array_options['options_domain_registration_page'];
 		if (getDolGlobalString($newnamekey)) {
 			$sellyoursaasemail = getDolGlobalString($newnamekey);
@@ -193,7 +202,7 @@ if (count($listofcontractid) > 0) {
 					$statusstring .= $s;
 
 					// If invoice is in dispute, we show it here
-					if (!empty($invoice->array_options['options_invoicepaymentdisputed'])) {
+					if (!empty($invoice->dispute_status)) {
 						$statusstring .= ' <span class="badge badge-warning badge-status" title="'.$langs->trans("InvoicePaymentDisputedMessage", $invoice->ref, dol_print_date($invoice->date, 'day')).'">';
 						$statusstring .= $langs->trans("Canceled").'</span>';
 					}
@@ -234,9 +243,9 @@ if (count($listofcontractid) > 0) {
 								<!-- Price -->
 					            <div class="col-6 col-md-2">
 									';
-				print (empty($invoice->array_options['options_invoicepaymentdisputed']) ? '' : '<strike>');
+				print (empty($invoice->dispute_status) ? '' : '<strike>');
 				print price(price2num($invoice->total_ttc), 1, $langs, 0, 0, getDolGlobalString('MAIN_MAX_DECIMALS_TOT'), $conf->currency);
-				print (empty($invoice->array_options['options_invoicepaymentdisputed']) ? '' : '</strike>');
+				print (empty($invoice->dispute_status) ? '' : '</strike>');
 
 				print '
 					            </div>
@@ -381,10 +390,29 @@ if ($mythirdpartyaccount->array_options['options_checkboxnonprofitorga'] != 'non
 				print '</tr>';
 
 				print '<tr><td colspan="3">';
+				// Show IBAN
 				print $langs->trans("IBAN").': <span class="small" title="'.$companypaymentmodetemp->iban_prefix.'">'.dol_trunc($companypaymentmodetemp->iban_prefix, 12, 'middle').'</span><br>';
+				// Show BIC
+				print $langs->trans("BIC").': <span class="small" title="'.$companypaymentmodetemp->bic.'">'.dol_trunc($companypaymentmodetemp->bic, 12, 'middle').'</span><br>';
+				// Show RUM
 				if ($companypaymentmodetemp->rum) {
-					print $langs->trans("RUM").': <span class="small" title="'.$companypaymentmodetemp->rum.'">'.$companypaymentmodetemp->rum.'</span>';
+					print $langs->trans("RUM").': <span class="small" title="'.$companypaymentmodetemp->rum.'">'.$companypaymentmodetemp->rum.'</span><br>';
 				}
+				// Show ICS
+				$ics = '';
+				$idbankfordirectdebit = getDolGlobalInt('PRELEVEMENT_ID_BANKACCOUNT');
+				if ($idbankfordirectdebit > 0) {
+					$tmpbankfordirectdebit = new Account($db);
+					$tmpbankfordirectdebit->fetch($idbankfordirectdebit);
+					$ics = $tmpbankfordirectdebit->ics;	// ICS for direct debit
+				}
+				if (empty($ics) && getDolGlobalString('PRELEVEMENT_ICS')) {
+					$ics = getDolGlobalString('PRELEVEMENT_ICS');
+				}
+				if ($ics) {
+					print $langs->trans("ICSShort").': <span class="small" title="'.$ics.'">'.$ics.'</span><br>';
+				}
+				// TODO Add link to download the mandate doc
 				print '</td></tr>';
 			} else {
 				print '<tr>';

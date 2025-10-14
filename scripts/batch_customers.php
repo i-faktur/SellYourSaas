@@ -229,15 +229,15 @@ if (! isset($argv[1])) {	// Check parameters
 	print "\n";
 	print "action can be:\n";
 	print "- updatecountsonly    updates metrics of instances only (list and nb of users for each instance)\n";
-	print "- updatestatsonly     updates stats only (only table sellyoursaas_stats) and send data to Datagog if enabled ***** Used by cron on master server *****\n";
+	print "- updatestatsonly     updates stats only (only table sellyoursaas_stats) and send data to Datagog if enabled <<<<< Used by cron on master server >>>>>\n";
 	print "- updatedatabase      (=updatecountsonly+updatestatsonly) updates list and nb of users, modules and version and stats table.\n";
 	print "- backuptest          test rsync+database backup\n";
 	print "- backuptestrsync     test rsync backup\n";
 	print "- backuptestdatabase  test database backup\n";
 	print "- backuprsync         creates backup (rsync)\n";
 	print "- backupdatabase      creates backup (mysqldump)\n";
-	print "- backup              creates backup (rsync + database) ***** Used by cron on deployment servers *****\n";
-	print "- backupdelete        creates backup (rsync with delete + database)\n";
+	print "- backup              creates backup (rsync + database)\n";
+	print "- backupdelete        creates backup (rsync with delete + database) <<<<< Used by cron on deployment servers >>>>>\n";
 	print "- backupdeleteexclude creates backup (rsync with delete excluded + database)\n";
 	print "\n";
 	print "with a backup... action, you can also add the option --force to execute backup even if done recently.\n";
@@ -525,7 +525,7 @@ if ($action == 'backup' || $action == 'backupdelete' || $action == 'backupdelete
 $today=dol_now();
 
 $error=0; $errors=array();
-$servicetouse=strtolower($conf->global->SELLYOURSAAS_NAME);
+$servicetouse = strtolower(getDolGlobalString('SELLYOURSAAS_NAME'));
 
 if ($action == 'updatedatabase' || $action == 'updatestatsonly' || $action == 'updatecountsonly') {	// updatedatabase = updatestatsonly + updatecountsonly
 	print "----- Start updatedatabase\n";
@@ -652,7 +652,7 @@ if ($action == 'updatedatabase' || $action == 'updatestatsonly' || $action == 'u
 
 					$rep = sellyoursaas_calculate_stats($dbmaster, $datelastday, $datefirstday);	// Get qty and amount into all template invoices linked to active contracts deployed before the $datelastday
 
-					$part = (!getDolGlobalString('SELLYOURSAAS_PERCENTAGE_FEE') ? 0 : $conf->global->SELLYOURSAAS_PERCENTAGE_FEE);
+					$part = getDolGlobalFloat('SELLYOURSAAS_PERCENTAGE_FEE');
 
 					foreach ($statkeylist as $statkey) {
 						if (! isset($stats[$statkey][$x]) || ($today <= $datelastday)) {	// If metric does not exist yet or if we are current month.
@@ -664,8 +664,8 @@ if ($action == 'updatedatabase' || $action == 'updatestatsonly' || $action == 'u
 								$totalcommissions = $rep['totalcommissions'];
 								$totalnewinstances = $rep['totalnewinstances'];
 								$totallostinstances = $rep['totallostinstances'];
-								$totalinstancespaying = $rep['totalinstancespaying'];
-								$totalinstancespayingall = $rep['totalinstancespayingall'];
+								$totalinstancespaying = $rep['totalinstancespaying'];			// total good standing instances (list of contracts with status done, not redirect, one service not suspended, not expired + recurring payment active)
+								$totalinstancespayingall = $rep['totalinstancespayingall'];		// total paying instance (list of contracts with status done, not redirect)
 								$totalinstances = $rep['totalinstances'];		// total trial only instances
 								$totalusers = $rep['totalusers'];
 								$totalcustomerspaying = $rep['totalcustomerspaying'];
@@ -757,7 +757,7 @@ if ($action == 'backup' || $action == 'backupdelete' || $action == 'backupdelete
 	$out.= "***** Summary for all deployment servers\n";
 }
 if ($action != 'updatestatsonly') {
-	$out.= "\n* Nb of paying instances processed KO: ".$nboferrors;
+	$out.= "\n* Nb of paying/confirmed instances processed KO: ".$nboferrors;
 }
 if (count($instancesbackuperror)) {
 	$out.= ", ERROR FOR BACKUP ON ";
@@ -775,13 +775,13 @@ if (count($instancesupdateerror)) {
 $out.= "\n\n";
 
 $out.= "* Nb of instances deployed: ".$nbofinstancedeployed."\n\n";
-$out.= "* Nb of paying instances (deployed with or without payment error): ".count($instances)."\n\n";	// $instance is qualified instances
-$out.= "* Nb of paying instances (deployed suspended): ".count($instancespaidsuspended)."\n";
+$out.= "* Nb of paying/confirmed instances (deployed with or without payment error): ".count($instances)."\n\n";	// $instance is qualified instances
+$out.= "* Nb of paying/confirmed instances (deployed suspended): ".count($instancespaidsuspended)."\n";
 $out.= (count($instancespaidsuspended) ? "Suspension on ".join(', ', $instancespaidsuspended)."\n\n" : "\n");
-$out.= "* Nb of paying instances (deployed suspended and payment error): ".count($instancespaidsuspendedandpaymenterror)."\n";
+$out.= "* Nb of paying/confirmed instances (deployed suspended and payment error): ".count($instancespaidsuspendedandpaymenterror)."\n";
 $out.= (count($instancespaidsuspendedandpaymenterror) ? "Suspension and payment error on ".join(', ', $instancespaidsuspendedandpaymenterror)."\n\n" : "\n");
-$out.= "* Nb of paying instances (deployed not suspended): ".count($instancespaidnotsuspended)."\n\n";
-$out.= "* Nb of paying instances (deployed not suspended but payment error): ".count($instancespaidnotsuspendedpaymenterror)."\n";
+$out.= "* Nb of paying/confirmed instances (deployed not suspended): ".count($instancespaidnotsuspended)."\n\n";
+$out.= "* Nb of paying/confirmed instances (deployed not suspended but payment error): ".count($instancespaidnotsuspendedpaymenterror)."\n";
 $out.= (count($instancespaidnotsuspendedpaymenterror) ? "Not yet suspended but payment error on ".join(', ', $instancespaidnotsuspendedpaymenterror)."\n\n" : "\n");
 
 $out.= "\n";
