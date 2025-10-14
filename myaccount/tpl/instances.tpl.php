@@ -626,6 +626,43 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 			//if ($line->statut != ContratLigne::STATUS_OPEN) continue;     // We need to show even if closed for the dashboard
 
 			//var_dump($line);
+			if ($line->fk_product > 0) {
+				$tmpproduct = new Product($db);
+				$tmpproduct->fetch($line->fk_product);
+			} else {
+				$tmpproduct = false;
+			}
+			
+			$label_suffix = "";
+			$included = false;
+			// if this product is included in another one
+			if ($tmpproduct && strlen($tmpproduct->array_options['options_includedinextension'])>0) {
+				$extensions = explode(",", $tmpproduct->array_options['options_includedinextension']);
+				// loop all products this product is included in
+				foreach ($extensions as $extension) {
+					// look if product this product is inclided in is active
+					foreach ($arrayoflines as $keyline2 => $line2) {
+						if ($line2->ref == $extension && $line2->qty > 0) {
+							if ($line2->fk_product > 0) {
+								$tmp = new Product($db);
+								$tmp->fetch($line2->fk_product);
+							}
+							$included = $tmp->label;
+							break 2;
+						}
+					}
+				}
+				if($included) {
+					$label_suffix .= '<br /><span style="font-size:0.6em; color:grey;"> Inclu dans ' . $included . '</span>';
+					$line->qty = 1;
+					$line->price_ht = 0;
+				}
+			}
+
+			if ($tmpproduct && $tmpproduct->url) {
+				print '<a target="prodinfo" href="' . $tmpproduct->url . '">';
+			}
+
 			print '<div class="resource inline-block boxresource">';
 
 			$resourceformula='';
