@@ -108,7 +108,7 @@ if (empty($dolibarrdir)) {
 
 // Load Dolibarr environment
 $res=0;
-// Try master.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try master.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -140,7 +140,7 @@ if (! $res && file_exists($dolibarrdir."/htdocs/master.inc.php")) {
 	$res=@include $dolibarrdir."/htdocs/master.inc.php";
 }
 if (! $res) {
-	print("Include of master fails");
+	print("Include of master fails\n");
 	exit(-1);
 }
 // After this $db, $mysoc, $langs, $conf and $hookmanager are defined (Opened $db handler to database will be closed at end of file).
@@ -163,6 +163,7 @@ $backupcompressionalgorithms='';	// can be '' or 'zstd'
 $backuprsyncdayfrequency=1;	// Default value is an rsync every 1 day.
 $backupdumpdayfrequency=1;	// Default value is a sql dump every 1 day.
 $master_unique_id = '';
+$instanceserver = '';
 $fp = @fopen('/etc/sellyoursaas.conf', 'r');
 // Add each line to an array
 if ($fp) {
@@ -271,7 +272,7 @@ if (empty($dirroot) || empty($instance) || empty($mode)) {
 	print "Usage:   $script_file  instance    backup_dir  (testrsync|testdatabase|test|confirmrsync|confirmdatabase|confirm) [--delete] [--notransaction] [--quick] [--forcersync] [--forcedump] [--nostats]\n";
 	print "Example: $script_file  myinstance  " . getDolGlobalString('DOLICLOUD_BACKUP_PATH')."  testrsync\n";
 	print "Note:    ssh keys must be authorized to have rsync (test and confirm) working\n";
-	print "         remote access to database must be granted for testdatabase or confirmdatabase.\n";
+	print "         remote access to database must be granted for mode testdatabase or confirmdatabase.\n";
 	print "         the parameter --delete run the rsync with the --delete option\n";
 	print "         the parameter --notransaction run the mysqldump without the --single-transaction\n";
 	print "         the parameter --quick run the mysqldump with the --quick option (recommended)\n";
@@ -611,9 +612,9 @@ if ($mode == 'testdatabase' || $mode == 'test' || $mode == 'confirmdatabase' || 
 			dol_delete_file($dirroot.'/'.$login.'/mysqldump_'.$object->database_db.'_ok.sql.gz');
 		} else {
 			if ($mode != 'confirm' && $mode != 'confirmdatabase') {
-				$fullcommand.=' 2>'.$dirroot.'/'.$login.'/mysqldump_'.$object->database_db.'_'.$prefixdumptemp.'.err | gzip '.(!getDolGlobalString('SELLYOURSAAS_DUMP_DATABASE_GZIP_OPTIONS') ? '' : $conf->global->SELLYOURSAAS_DUMP_DATABASE_GZIP_OPTIONS).' > /dev/null';
+				$fullcommand.=' 2>'.$dirroot.'/'.$login.'/mysqldump_'.$object->database_db.'_'.$prefixdumptemp.'.err | gzip '.getDolGlobalString('SELLYOURSAAS_DUMP_DATABASE_GZIP_OPTIONS').' > /dev/null';
 			} else {
-				$fullcommand.=' 2>'.$dirroot.'/'.$login.'/mysqldump_'.$object->database_db.'_'.$prefixdumptemp.'.err | gzip '.(!getDolGlobalString('SELLYOURSAAS_DUMP_DATABASE_GZIP_OPTIONS') ? '' : $conf->global->SELLYOURSAAS_DUMP_DATABASE_GZIP_OPTIONS).' > '.$dirroot.'/'.$login.'/mysqldump_'.$object->database_db.'_'.$prefixdumptemp.'.sql.gz';
+				$fullcommand.=' 2>'.$dirroot.'/'.$login.'/mysqldump_'.$object->database_db.'_'.$prefixdumptemp.'.err | gzip '.getDolGlobalString('SELLYOURSAAS_DUMP_DATABASE_GZIP_OPTIONS').' > '.$dirroot.'/'.$login.'/mysqldump_'.$object->database_db.'_'.$prefixdumptemp.'.sql.gz';
 			}
 			// Delete file with same name and other extensions (if other option was enabled in past)
 			dol_delete_file($dirroot.'/'.$login.'/mysqldump_'.$object->database_db.'_'.dol_print_date(dol_now('gmt'), '%d', 'gmt').'.sql.bz2');
@@ -737,7 +738,7 @@ if (empty($return_varother) && empty($return_var) && empty($return_varmysql) && 
 
 				$arrayconfig=array();
 				if (getDolGlobalString('SELLYOURSAAS_DATADOG_APIKEY')) {
-					$arrayconfig=array('apiKey'=>getDolGlobalString('SELLYOURSAAS_DATADOG_APIKEY'), 'app_key' => getDolGlobalString('SELLYOURSAAS_DATADOG_APPKEY'));
+					$arrayconfig=array('apiKey' => getDolGlobalString('SELLYOURSAAS_DATADOG_APIKEY'), 'app_key' => getDolGlobalString('SELLYOURSAAS_DATADOG_APPKEY'));
 				}
 
 				$statsd = new DataDog\DogStatsd($arrayconfig);
@@ -776,7 +777,7 @@ if (empty($return_varother) && empty($return_var) && empty($return_varmysql) && 
 
 				$arrayconfig=array();
 				if (getDolGlobalString('SELLYOURSAAS_DATADOG_APIKEY')) {
-					$arrayconfig=array('apiKey'=>getDolGlobalString('SELLYOURSAAS_DATADOG_APIKEY'), 'app_key' => getDolGlobalString('SELLYOURSAAS_DATADOG_APPKEY'));
+					$arrayconfig=array('apiKey' => getDolGlobalString('SELLYOURSAAS_DATADOG_APIKEY'), 'app_key' => getDolGlobalString('SELLYOURSAAS_DATADOG_APPKEY'));
 				}
 
 				$statsd = new DataDog\DogStatsd($arrayconfig);

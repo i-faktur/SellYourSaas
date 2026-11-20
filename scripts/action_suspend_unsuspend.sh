@@ -14,11 +14,11 @@ export now=`date +'%Y-%m-%d %H:%M:%S'`
 echo
 echo
 echo "####################################### ${0} ${1}"
-echo "${0} ${@}"
+echo "${0} ${1} ... (other parameters not shown, they contain passwords)"
 echo "# user id --------> $(id -u)"
 echo "# now ------------> $now"
 echo "# PID ------------> ${$}"
-echo "# PWD ------------> $PWD" 
+echo "# PWD ------------> $PWD"
 #echo "# arguments ------> ${@}"
 echo "# parent path ----> ${0%/*}"
 echo "# realname name --> $(basename $(realpath ${0}))"
@@ -34,6 +34,11 @@ htdocsdir=`grep '^htdocsdir=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 phpfpm=`grep '^phpfpm=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 phpversion=`grep '^phpversion=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 localip=`grep '^localip=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
+# Not always set in /etc/sellyoursaas.conf: an empty value produces "<VirtualHost :443 :80>",
+# which apache2ctl configtest refuses, so every vhost reload fails on that server.
+if [[ "x$localip" == "x" ]]; then
+	localip="*"
+fi
 if [[ "x$htdocsdir" == "x" ]]; then
 	export htdocsdir="/htdocs"
 fi
@@ -141,7 +146,7 @@ if [ "x$customurl" == "x-" ]; then
 fi
 export contractlineid=${28}
 export EMAILFROM=${29}
-# CERTIFFORCUSTOMDOMAIN. Example: withY.mysaasdomain.com, myowndomain.com 
+# CERTIFFORCUSTOMDOMAIN. Example: withY.mysaasdomain.com, myowndomain.com
 export CERTIFFORCUSTOMDOMAIN=${30}
 if [ "x$CERTIFFORCUSTOMDOMAIN" == "x-" ]; then
 	CERTIFFORCUSTOMDOMAIN=""
@@ -157,6 +162,8 @@ export VIRTUALHOSTHEAD=${35//£/ }
 if [ "x$VIRTUALHOSTHEAD" == "x-" ]; then
 	VIRTUALHOSTHEAD=""
 fi
+# Escape chars that have a special meaning in the replacement of a sed 's;;;' command, to avoid sed injection
+export VIRTUALHOSTHEADFORSED=$(printf '%s' "$VIRTUALHOSTHEAD" | tr -d '\r\n' | sed -e 's/[\\;&]/\\&/g')
 export ispaidinstance=${36}
 export SELLYOURSAAS_LOGIN_FOR_SUPPORT=${37}
 export directaccess=${38}
@@ -192,9 +199,9 @@ if [[ "x$webSSLCertificateIntermediate" == "x" ]]; then
 fi
 
 # possibility to change the path of sellyoursass directory
-olddoldataroot=`grep '^olddoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-newdoldataroot=`grep '^newdoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-if [[ "x$olddoldataroot" != "x" && "x$newdoldataroot" != "x" ]]; then
+olddoldataroot="/home/admin/wwwroot/dolibarr_documents"
+newdoldataroot=`grep '^doldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
+if [[ "x$newdoldataroot" != "x" ]]; then
 	fileforconfig1=${fileforconfig1/$olddoldataroot/$newdoldataroot}
 	dirwithdumpfile=${dirwithdumpfile/$olddoldataroot/$newdoldataroot}
 	dirwithsources1=${dirwithsources1/$olddoldataroot/$newdoldataroot}
@@ -215,11 +222,11 @@ echo "fileforconfig1 = $fileforconfig1"
 echo "targetdir = $targetdir"
 echo "EMAILTO = $EMAILTO"
 echo "REMOTEIP = $REMOTEIP"
-echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL" 
-echo "instancenameold = $instancenameold" 
+echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL"
+echo "instancenameold = $instancenameold"
 echo "domainnameold = $domainnameold"
 echo "customurl = $customurl"
-echo "contractlineid = $contractlineid" 
+echo "contractlineid = $contractlineid"
 echo "EMAILFROM = $EMAILFROM"
 echo "CERTIFFORCUSTOMDOMAIN = $CERTIFFORCUSTOMDOMAIN"
 echo "archivedir = $archivedir"
@@ -263,12 +270,12 @@ if [[ "$mode" == "rename" ]]; then
 
 		export apacheconf="/etc/apache2/sellyoursaas-online/$fqn.conf"
 		if [ -f $apacheconf ]; then
-			echo "Error failed to rename. New name is already used (found file /etc/apache2/sellyoursaas-online/$fqn.conf)." 
+			echo "Error failed to rename. New name is already used (found file /etc/apache2/sellyoursaas-online/$fqn.conf)."
 			exit 80
 		fi
 	fi
-	
-	
+
+
 	# TODO - Add DNS entry for $fqn ? Still required with wildcard DNS ?
 
 
@@ -319,7 +326,7 @@ if [[ "$mode" == "rename" ]]; then
 			  sed -e "s/__osUsername__/$osusername/g" | \
 			  sed -e "s/__osGroupname__/$osusername/g" | \
 			  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 			  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 			  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 			  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -346,14 +353,14 @@ if [[ "$mode" == "rename" ]]; then
 
 		export pathforcertifmaster="/home/admin/wwwroot/dolibarr_documents/sellyoursaas/crt"
 		export pathforcertiflocal="/home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt"
-	
+
 		echo `date +'%Y-%m-%d %H:%M:%S'`" Check that SSL files for $fqn.custom exists and create them if not (CERTIFFORCUSTOMDOMAIN=$CERTIFFORCUSTOMDOMAIN)"
 		if [[ "x$CERTIFFORCUSTOMDOMAIN" != "x" ]]; then
-			# If a name for a custom CERTIF stored on master was forced, we use this one as SSL certiticate
+			# If a name for a custom CERTIF stored on master was forced, we use this one as SSL certificate
 			export webCustomSSLCertificateCRT=$CERTIFFORCUSTOMDOMAIN.crt
 			export webCustomSSLCertificateKEY=$CERTIFFORCUSTOMDOMAIN.key
 			export webCustomSSLCertificateIntermediate=$CERTIFFORCUSTOMDOMAIN-intermediate.crt
-		
+
 			if [[ ! -e $pathforcertiflocal/$webCustomSSLCertificateCRT ]]; then
 				# If file or link does not exist
 				echo `date +'%Y-%m-%d %H:%M:%S'`" Copy file $pathforcertifmaster/$webCustomSSLCertificateCRT to $pathforcertiflocal/$webCustomSSLCertificateCRT"
@@ -387,10 +394,10 @@ if [[ "$mode" == "rename" ]]; then
 					ln -fs /etc/apache2/$webSSLCertificateIntermediate $pathforcertiflocal/$webCustomSSLCertificateIntermediate
 				fi
 			fi
-		else 
+		else
 			# No $CERTIFFORCUSTOMDOMAIN forced (no cert file was created/uploaded initially), so we will generate one or reuse an already generated one
 			export domainnameorcustomurl=`echo $customurl | cut -d "." -f 1`
-			
+
 			# We must create the custom CRT file using letsencrypt if not yet created
 			if [[ ! -e /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$fqn-custom.crt ]]; then
 				# When we rename, it may be because we change abc.with... into def.with..., or
@@ -413,7 +420,7 @@ if [[ "$mode" == "rename" ]]; then
 
 				# Must generate a temporary custom virtual host BEFORE calling letsencrypt so a server is on and certbot will be able to run
 				# We use generic certificate, and we even try to disable SSL
-				
+
 				export pathforcertiflocal="/etc/apache2"
 				export webCustomSSLCertificateCRT=$webSSLCertificateCRT
 				export webCustomSSLCertificateKEY=$webSSLCertificateKEY
@@ -422,11 +429,11 @@ if [[ "$mode" == "rename" ]]; then
 
 				# We do not use SSL for this temporary virtual host
 				SSLON="Off"
-				
+
 				# Delete old custom conf file
 				export apacheconf="/etc/apache2/sellyoursaas-available/$fqn.custom.conf"
 				echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create a new temporary apache conf $apacheconf from $vhostfile"
-	
+
 				if [[ -s $apacheconf ]]
 				then
 					echo "Apache conf $apacheconf already exists, we delete it since it may be a file from an old instance with same name"
@@ -469,7 +476,7 @@ if [[ "$mode" == "rename" ]]; then
 						  sed -e "s/RewriteEngine on/RewriteEngine $SSLON/ig" | \
 						  sed -e "s/RewriteEngine off/RewriteEngine $SSLON/ig" | \
 						  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-						  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+						  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 						  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 						  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 						  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -481,28 +488,28 @@ if [[ "$mode" == "rename" ]]; then
 						  sed -e "s;__localip__;$localip;g" | \
 						  sed -e "s;__webAppPath__;$instancedir;g" | \
 						  sed -e "s/with\.sellyoursaas\.com/$CERTIFFORCUSTOMDOMAIN/g" > $apacheconf
-			
-			
+
+
 				#echo Enable conf with a2ensite $fqn.custom.conf
 				#a2ensite $fqn.custom.conf
 				echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
 				ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
-				
+
 
 				echo /usr/sbin/apache2ctl configtest
 				/usr/sbin/apache2ctl configtest
 				if [[ "x$?" != "x0" ]]; then
-					echo Error when running apache2ctl configtest 
-					echo "Failed to rename instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO 
+					echo Error when running apache2ctl configtest
+					echo "Failed to rename instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO
 					sleep 1
 					exit 9
-				fi 
-			
+				fi
+
 				echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Temporary virtual host ready, service apache2 reload."
 				service apache2 reload
 				if [[ "x$?" != "x0" ]]; then
 					echo Error when running service apache2 reload
-					echo "Failed to rename instance $instancename.$domainname with: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO 
+					echo "Failed to rename instance $instancename.$domainname with: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO
 					sleep 1
 					exit 20
 				else
@@ -516,13 +523,13 @@ if [[ "$mode" == "rename" ]]; then
 
 				# Test result of the certbot
 				certbotresult=$?
-				
+
 				# Vérify return code and show appropriate message
 				if [ $certbotresult -eq 0 ]; then
 					echo "certbot command seems to succeed"
 				else
 					echo "certbot command seems to failed"
-				fi				
+				fi
 
                 # Create links
 				if [[ -e /etc/letsencrypt/live/$customurl/cert.pem ]]; then
@@ -542,7 +549,7 @@ if [[ "$mode" == "rename" ]]; then
 					echo `date +'%Y-%m-%d %H:%M:%S'`" File /etc/letsencrypt/live/$customurl/cert.pem generated by certbot was not found (should not happen if certbot was not launched in dry-run)"
 				fi
 			fi
-			
+
 			if [[ ! -e "/home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$fqn-custom.crt" ]]; then
 				# If custom cert not found, we fallback on the wildcard one for server (it will generate a warning, but it will works and not hangs !)
 				export pathforcertiflocal="/etc/apache2"
@@ -560,24 +567,24 @@ if [[ "$mode" == "rename" ]]; then
 			fi
 			echo "We will use the certificate file webCustomSSLCertificateCRT=$pathforcertiflocal/$webCustomSSLCertificateCRT (CERTIFFORCUSTOMDOMAIN=$CERTIFFORCUSTOMDOMAIN)"
 		fi
-		
-		
+
+
 		# If the certificate file is not found, we disable SSL
 		if [[ ! -e "$pathforcertiflocal/$webCustomSSLCertificateCRT" ]]; then
 			SSLON="Off"
 		else
 			SSLON="On"
 		fi
-		
+
 		export apacheconf="/etc/apache2/sellyoursaas-available/$fqn.custom.conf"
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create final apache conf $apacheconf from $vhostfile"
-	
+
 		if [[ -s $apacheconf ]]
 		then
 			echo "Apache conf $apacheconf already exists, we delete it since it may be a file from an old instance with same name"
 			rm -f $apacheconf
 		fi
-	
+
 		echo "cat $vhostfile | sed -e 's/__webAppDomain__/$customurl/g' | \
 				  sed -e 's/__webAppAliases__/$customurl/g' | \
 				  sed -e 's/__webAppLogName__/$instancename/g' | \
@@ -614,7 +621,7 @@ if [[ "$mode" == "rename" ]]; then
 				  sed -e "s/RewriteEngine on/RewriteEngine $SSLON/ig" | \
 				  sed -e "s/RewriteEngine off/RewriteEngine $SSLON/ig" | \
 				  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 				  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 				  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 				  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -626,32 +633,32 @@ if [[ "$mode" == "rename" ]]; then
 				  sed -e "s;__localip__;$localip;g" | \
 				  sed -e "s;__webAppPath__;$instancedir;g" | \
 				  sed -e "s/with\.sellyoursaas\.com/$CERTIFFORCUSTOMDOMAIN/g" > $apacheconf
-	
-	
+
+
 		#echo Enable conf with a2ensite $fqn.custom.conf
 		#a2ensite $fqn.custom.conf
 		echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
 		ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
-	
-	fi 
+
+	fi
 
 
 
 	echo /usr/sbin/apache2ctl configtest
 	/usr/sbin/apache2ctl configtest
 	if [[ "x$?" != "x0" ]]; then
-		echo Error when running apache2ctl configtest 
-		echo "Failed to rename instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO 
+		echo Error when running apache2ctl configtest
+		echo "Failed to rename instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO
 		sleep 1
 		exit 9
-	fi 
+	fi
 
 	if [[ "x$apachereload" != "xnoapachereload" ]]; then
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Apache tasks finished. service apache2 reload."
 		service apache2 reload
 		if [[ "x$?" != "x0" ]]; then
 			echo Error when running service apache2 reload
-			echo "Failed to rename instance $instancename.$domainname with: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO 
+			echo "Failed to rename instance $instancename.$domainname with: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO
 			sleep 1
 			exit 20
 		else
@@ -670,30 +677,30 @@ if [[ "$mode" == "rename" ]]; then
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Remove apache conf $apacheconf"
 
 		if [ -f $apacheconf ]; then
-		
+
 			echo Disable conf with a2dissite $fqnold.conf
 			#a2dissite $fqn.conf
 			rm -f /etc/apache2/sellyoursaas-online/$fqnold.conf
 			rm -f /etc/apache2/sellyoursaas-online/$fqnold.custom.conf
-			
+
 			/usr/sbin/apache2ctl configtest
 			if [[ "x$?" != "x0" ]]; then
-				echo Error when running apache2ctl configtest 
+				echo Error when running apache2ctl configtest
 				echo "Failed to delete virtual host with old name instance $instancenameold.$domainnameold with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO
 				sleep 1
 				exit 3
 			fi
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Apache tasks finished. service apache2 reload"
 			service apache2 reload
 			if [[ "x$?" != "x0" ]]; then
-				echo Error when running service apache2 reload 
+				echo Error when running service apache2 reload
 				echo "Failed to delete virtual host with old name instance $instancenameold.$domainnameold with: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in rename" $EMAILTO
 				sleep 1
 				exit 4
 			#else
 			#   A sleep is already don at end of script
-			#	sleep 1			
+			#	sleep 1
 			fi
 		else
 			echo "Virtual host $apacheconf seems already disabled"
@@ -709,7 +716,7 @@ fi
 # Suspend
 # 'suspend' = change virtual host with a page with a message 'Suspended' and disable cron
 # 'suspendmaintenance' = change virtual host with a page with a message 'Offline' and keep cron alive
-# 'suspendredirect' = change virtual host with a page with a message 'Offline', will alos update the DNS entry
+# 'suspendredirect' = change virtual host with a page with a message 'Offline', will also update the DNS entry
 
 if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspendredirect" ]]; then
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Suspend instance in $targetdir/$osusername/$dbname"
@@ -718,10 +725,10 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 	export vhostfiletouse=$vhostfilesuspended;
 	if [[ $mode == "suspendmaintenance" || $mode == "suspendredirect" ]]; then
 		# Will use the virtual host template file vhostHttps-sellyoursaas-maintenance.template that call the page maintenance.php
-		# This page will make a redirect instea dof showing a maintenance message if the message start with http...
+		# This page will make a redirect instead of showing a maintenance message if the message start with http...
 		export vhostfiletouse=$vhostfilemaintenance;
-	fi	
-	
+	fi
+
 	export apacheconf="/etc/apache2/sellyoursaas-available/$fqn.conf"
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create a new suspended apache conf $apacheconf from $vhostfiletouse"
 
@@ -763,7 +770,7 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 			  sed -e "s/__osUsername__/$osusername/g" | \
 			  sed -e "s/__osGroupname__/$osusername/g" | \
 			  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 			  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 			  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 			  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -779,7 +786,7 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 	# Enable conf with ln
 	echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.conf /etc/apache2/sellyoursaas-online
 	ln -fs /etc/apache2/sellyoursaas-available/$fqn.conf /etc/apache2/sellyoursaas-online
-	
+
 	# We create also the virtual host for the custom url
 	if [[ "x$customurl" != "x" ]]; then
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** For instance in $targetdir/$osusername/$dbname and mode=suspend..., we create also a new custom virtual file named $fqn.custom.conf"
@@ -790,7 +797,7 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 		echo `date +'%Y-%m-%d %H:%M:%S'`" Check that SSL files for $fqn.custom exists to reuse them (CERTIFFORCUSTOMDOMAIN=$CERTIFFORCUSTOMDOMAIN)"
 
         if [[ "x$CERTIFFORCUSTOMDOMAIN" != "x" ]]; then
-                # If a name for a custom CERTIF stored on master was forced, we use this one as SSL certiticate
+                # If a name for a custom CERTIF stored on master was forced, we use this one as SSL certificate
                 export webCustomSSLCertificateCRT=$CERTIFFORCUSTOMDOMAIN.crt
                 export webCustomSSLCertificateKEY=$CERTIFFORCUSTOMDOMAIN.key
                 export webCustomSSLCertificateIntermediate=$CERTIFFORCUSTOMDOMAIN-intermediate.crt
@@ -851,9 +858,9 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 				export CERTIFFORCUSTOMDOMAIN="$fqn-custom"
 			fi
 			echo "We will use the certificate file webCustomSSLCertificateCRT=$pathforcertiflocal/$webCustomSSLCertificateCRT (CERTIFFORCUSTOMDOMAIN=$CERTIFFORCUSTOMDOMAIN)"
-		fi	
-	
-		
+		fi
+
+
         # If the certificate file is not found, we disable SSL
         if [[ ! -e $webCustomSSLCertificateCRT ]]; then
 			SSLON="Off"
@@ -863,13 +870,13 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 
         export apacheconf="/etc/apache2/sellyoursaas-available/$fqn.custom.conf"
         echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create a new suspended apache custom conf $apacheconf from $vhostfiletouse"
-	
+
 		if [[ -s $apacheconf ]]
 		then
 			echo "Apache conf $apacheconf already exists, we delete it since it may be a file from an old instance with same name"
 			rm -f $apacheconf
 		fi
-	
+
 		echo "cat $vhostfiletouse | sed -e 's/__webAppDomain__/$customurl/g' | \
 				  sed -e 's/__webAppAliases__/$customurl/g' | \
 				  sed -e 's/__webAppLogName__/$instancename/g' | \
@@ -901,7 +908,7 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 				  sed -e "s/__osUsername__/$osusername/g" | \
 				  sed -e "s/__osGroupname__/$osusername/g" | \
 				  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 			  	  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 			  	  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 			  	  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -918,7 +925,7 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 		#a2ensite $fqn.custom.conf
 		echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
 		ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
-	
+
 	fi
 
 
@@ -929,10 +936,10 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 		rm -f /etc/apache2/sellyoursaas-online/$fqn.conf
 		rm -f /etc/apache2/sellyoursaas-online/$fqn.custom.conf
 		#rm -f /etc/apache2/sellyoursaas-online/$fqn.website*.conf	# Not modified previously and removed just after
-		echo "Failed to suspend instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Warning] Pb when suspending $instancename.$domainname" $EMAILTO 
+		echo "Failed to suspend instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Warning] Pb when suspending $instancename.$domainname" $EMAILTO
 		sleep 1
 		exit 5
-	fi 
+	fi
 
 	# Remove virtual host for public web sites by deleting links into sellyoursaas-enabled
 	echo "Remove virtual host for possible virtual host for web sites"
@@ -941,19 +948,19 @@ if [[ "$mode" == "suspend" || $mode == "suspendmaintenance" || $mode == "suspend
 		echo Delete conf with rm -f /etc/apache2/sellyoursaas-online/$fqn.website-*.conf
 		rm -f /etc/apache2/sellyoursaas-online/$fqn.website-*.conf
 	done
-	
-	
+
+
 	if [[ "x$apachereload" != "xnoapachereload" ]]; then
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Apache tasks finished. service apache2 reload."
 		service apache2 reload
 		if [[ "x$?" != "x0" ]]; then
 			echo Error when running service apache2 reload
 			echo "Failed to suspend instance $instancename.$domainname with: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Warning] Pb when suspending $instancename.$domainname" $EMAILTO
-			sleep 1 
+			sleep 1
 			exit 6
 		#else
 		#   A sleep is already done at end of script
-		#	sleep 1			
+		#	sleep 1
 		fi
 	else
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Apache tasks finished. But we do not reload apache2 now to reduce reloading."
@@ -1007,7 +1014,7 @@ if [[ "$mode" == "unsuspend" ]]; then
 			  sed -e "s/__osUsername__/$osusername/g" | \
 			  sed -e "s/__osGroupname__/$osusername/g" | \
 			  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 			  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 			  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 			  sed -e "s;__webMyAccount__;$SELLYOURSAAS_ACCOUNT_URL;g" | \
@@ -1021,7 +1028,7 @@ if [[ "$mode" == "unsuspend" ]]; then
 	# Enable conf with ln
 	echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.conf /etc/apache2/sellyoursaas-online
 	ln -fs /etc/apache2/sellyoursaas-available/$fqn.conf /etc/apache2/sellyoursaas-online
-	
+
 	# We create the virtual host for the custom url
 	if [[ "x$customurl" != "x" ]]; then
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** For instance in $targetdir/$osusername/$dbname and mode=unsuspend, we will create a new custom virtual name $fqn.custom"
@@ -1030,9 +1037,9 @@ if [[ "$mode" == "unsuspend" ]]; then
         export pathforcertiflocal="/home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt"
 
 		echo `date +'%Y-%m-%d %H:%M:%S'`" Check that SSL files for $fqn.custom exists to reuse them (CERTIFFORCUSTOMDOMAIN=$CERTIFFORCUSTOMDOMAIN)"
-	
+
         if [[ "x$CERTIFFORCUSTOMDOMAIN" != "x" ]]; then
-                # If a name for a custom CERTIF stored on master was forced, we use this one as SSL certiticate
+                # If a name for a custom CERTIF stored on master was forced, we use this one as SSL certificate
                 export webCustomSSLCertificateCRT=$CERTIFFORCUSTOMDOMAIN.crt
                 export webCustomSSLCertificateKEY=$CERTIFFORCUSTOMDOMAIN.key
                 export webCustomSSLCertificateIntermediate=$CERTIFFORCUSTOMDOMAIN-intermediate.crt
@@ -1091,25 +1098,25 @@ if [[ "$mode" == "unsuspend" ]]; then
 				export webCustomSSLCertificateIntermediate="$fqn-custom-intermediate.crt"
 				export CERTIFFORCUSTOMDOMAIN="$fqn-custom"
 			fi
-		fi	
-	
-		
+		fi
+
+
         # If the certificate file is not found, we disable SSL
         if [[ ! -e "$pathforcertiflocal/$webCustomSSLCertificateCRT" ]]; then
 			SSLON="Off"
         else
 			SSLON="On"
         fi
-        	
+
 		export apacheconf="/etc/apache2/sellyoursaas-available/$fqn.custom.conf"
 		echo "Create a new apache conf $apacheconf from $vhostfiletouse"
-	
+
 		if [[ -s $apacheconf ]]
 		then
 			echo "Apache conf $apacheconf already exists, we delete it since it may be a file from an old instance with same name"
 			rm -f $apacheconf
 		fi
-	
+
 		echo "cat $vhostfiletouse | sed -e 's/__webAppDomain__/$customurl/g' | \
 				  sed -e 's/__webAppAliases__/$customurl/g' | \
 				  sed -e 's/__webAppLogName__/$instancename/g' | \
@@ -1140,7 +1147,7 @@ if [[ "$mode" == "unsuspend" ]]; then
 				  sed -e "s/__osUsername__/$osusername/g" | \
 				  sed -e "s/__osGroupname__/$osusername/g" | \
 				  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 				  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 				  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 				  sed -e "s;__webMyAccount__;$SELLYOURSAAS_ACCOUNT_URL;g" | \
@@ -1150,13 +1157,13 @@ if [[ "$mode" == "unsuspend" ]]; then
 				  sed -e "s;__localip__;$localip;g" | \
 				  sed -e "s;__webAppPath__;$instancedir;g" | \
 				  sed -e "s/with\.sellyoursaas\.com/$CERTIFFORCUSTOMDOMAIN/g" > $apacheconf
-	
-	
+
+
 		#echo Enable conf with a2ensite $fqn.custom.conf
 		#a2ensite $fqn.custom.conf
 		echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
 		ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
-	
+
 	fi
 
 
@@ -1172,22 +1179,22 @@ if [[ "$mode" == "unsuspend" ]]; then
 	echo /usr/sbin/apache2ctl configtest
 	/usr/sbin/apache2ctl configtest
 	if [[ "x$?" != "x0" ]]; then
-		echo Error when running apache2ctl configtest 
-		echo "Failed to unsuspend instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in suspend" $EMAILTO 
+		echo Error when running apache2ctl configtest
+		echo "Failed to unsuspend instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in suspend" $EMAILTO
 		sleep 1
 		exit 7
-	fi 
+	fi
 
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Apache tasks finished. service apache2 reload"
 	service apache2 reload
 	if [[ "x$?" != "x0" ]]; then
 		echo Error when running service apache2 reload
-		echo "Failed to unsuspend instance $instancename.$domainname with: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in suspend" $EMAILTO 
+		echo "Failed to unsuspend instance $instancename.$domainname with: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in suspend" $EMAILTO
 		sleep 1
 		exit 8
 	#else
 	#   A sleep is already don at end of script
-	#	sleep 1			
+	#	sleep 1
 	fi
 
 fi
@@ -1242,14 +1249,14 @@ if [[ "$mode" == "suspend" || "$mode" == "suspendredirect" ]]; then
 		rm -f /tmp/$dbname.tmp
 	else
 		echo cron file /var/spool/cron/crontabs/$osusername already removed or empty
-	fi 
+	fi
 
 fi
 
 
 if [[ "$mode" == "suspendredirect" ]]; then
 
-	export ZONE="$domainname.hosts" 
+	export ZONE="$domainname.hosts"
 
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** If IP for $instancename in DNS files /etc/bind/${ZONE} has changed and is not $REMOTEIP, we must also change the DNS entry."
 

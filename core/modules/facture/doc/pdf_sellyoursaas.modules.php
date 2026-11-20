@@ -35,13 +35,25 @@ require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
-require_once DOL_DOCUMENT_ROOT.'/core/modules/facture/doc/pdf_crabe.modules.php';
+
+if (file_exists(DOL_DOCUMENT_ROOT.'/core/modules/facture/doc/pdf_sponge.modules.php')) {
+	include_once DOL_DOCUMENT_ROOT.'/core/modules/facture/doc/pdf_sponge.modules.php';
+} else {
+	include_once DOL_DOCUMENT_ROOT.'/core/modules/facture/doc/pdf_crabe.modules.php';
+
+	/**
+	 *	Class to manage PDF invoice template Crabe
+	 */
+	class pdf_sponge extends pdf_crabe
+	{
+	}
+}
 
 
 /**
  *	Class to manage PDF invoice template Crabe
  */
-class pdf_sellyoursaas extends pdf_crabe
+class pdf_sellyoursaas extends pdf_sponge
 {
 	/**
 	 *	Constructor
@@ -72,7 +84,7 @@ class pdf_sellyoursaas extends pdf_crabe
 	 *  @param  int	    	$showaddress    0=no, 1=yes
 	 *  @param  Translate	$outputlangs	Object lang for output
 	 *  @param  Translate	$outputlangsbis	Object lang bis for output
-	 *  @return	void
+	 *  @return	array
 	 */
 	protected function _pagehead(&$pdf, $object, $showaddress, $outputlangs, $outputlangsbis = null)
 	{
@@ -85,9 +97,11 @@ class pdf_sellyoursaas extends pdf_crabe
 		}
 		$this->emetteur->logo = getDolGlobalString('SELLYOURSAAS_LOGO');
 
-		parent::_pagehead($pdf, $object, $showaddress, $outputlangs);
+		$pagehead = parent::_pagehead($pdf, $object, $showaddress, $outputlangs, $outputlangsbis);
 
 		$this->emetteur->name = $savname;
 		$this->emetteur->logo = $savlogo;
+
+		return $pagehead;
 	}
 }

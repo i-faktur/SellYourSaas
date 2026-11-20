@@ -39,6 +39,9 @@ if (!defined('NOREQUIRESOC')) {
 if (!defined('NOCSRFCHECK')) {
 	define('NOCSRFCHECK', '1');
 }
+if (!defined('NOIPCHECK')) {
+	define('NOIPCHECK', '1'); // Do not check IP defined into conf $dolibarr_main_restrict_ip
+}
 if (!defined('NOBROWSERNOTIF')) {
 	define('NOBROWSERNOTIF', '1');
 }
@@ -107,19 +110,17 @@ foreach ($contractids as $contractid) {
 		$lines = $tmpcontract->fetch_lines();
 		foreach ($lines as $line) {
 			$tmpproduct->fetch($line->fk_product);
-			if ($tmpproduct->array_options['options_app_or_option'] == 'app') {
-				dol_syslog("Found product_id=".$tmpproduct->id);
-				if ($tmpproduct->array_options['options_register_discountcode']) {
-					$tmparray = explode(',', $tmpproduct->array_options['options_register_discountcode']);
-					foreach ($tmparray as $tmp) {
-						$tmparray2 = explode(':', $tmp);
-						$codefound = trim($tmparray2[0]);
-						$valuefound = trim($tmparray2[1]);
-						$listofvalidregisterdiscountcode[$line->fk_product.'_'.$codefound] = array('product_id' => $line->fk_product, 'code' => $codefound, 'value' => $valuefound);
-					}
+			dol_syslog("Found product_id=".$tmpproduct->id);
+			if ($tmpproduct->array_options['options_register_discountcode']) {
+				$tmparray = explode(',', $tmpproduct->array_options['options_register_discountcode']);
+				foreach ($tmparray as $tmp) {
+					$tmparray2 = explode(':', $tmp);
+					$codefound = trim($tmparray2[0]);
+					$valuefound = trim($tmparray2[1]);
+					$listofvalidregisterdiscountcode[$line->fk_product.'_'.$codefound] = array('product_id' => $line->fk_product, 'code' => $codefound, 'value' => $valuefound);
 				}
-				//var_dump("Found product_id=".$tmpproduct->id." ".$tmpproduct->array_options['options_register_discount_code']);
 			}
+			//var_dump("Found product_id=".$tmpproduct->id." ".$tmpproduct->array_options['options_register_discount_code']);
 		}
 	}
 }

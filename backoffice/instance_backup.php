@@ -27,7 +27,7 @@ $res=0;
 if (! $res && ! empty($_SERVER["CONTEXT_DOCUMENT_ROOT"])) {
 	$res=@include $_SERVER["CONTEXT_DOCUMENT_ROOT"]."/main.inc.php";
 }
-// Try main.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try main.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -103,6 +103,25 @@ $restorestringpretoshow = '';
 $restorestringposttoshow = '';
 $moveinstancestringtoshow = '';
 
+// Get the hostname of the deployment server from its IP, to build the remote backup path
+$servershorthostname = 'yyy';
+if (!empty($object->array_options['options_deployment_host'])) {
+	$sql = "SELECT hostname FROM ".MAIN_DB_PREFIX."sellyoursaas_deploymentserver";
+	$sql .= " WHERE ipaddress = '".$db->escape($object->array_options['options_deployment_host'])."'";
+	$sql .= " AND entity IN (".getEntity('sellyoursaas_deploymentserver').")";
+	$sql .= $db->plimit(1);
+	$resql = $db->query($sql);
+	if ($resql) {
+		$obj = $db->fetch_object($resql);
+		if ($obj && !empty($obj->hostname)) {
+			$servershorthostname = preg_replace('/\..*$/', '', $obj->hostname);
+		}
+		$db->free($resql);
+	} else {
+		dol_syslog("Failed to get hostname of deployment server: ".$db->lasterror(), LOG_WARNING);
+	}
+}
+
 $ispaid = sellyoursaasIsPaidInstance($object);
 if ($ispaid) {
 	if ($object->array_options['options_deployment_status'] != 'undeployed') {
@@ -126,7 +145,6 @@ if ($ispaid) {
 		$restorestringfromarchiveshort = getDolGlobalString('DOLICLOUD_SCRIPTS_PATH') . '/restore_instance.php ' . getDolGlobalString('SELLYOURSAAS_PAID_ARCHIVES_PATH').'/'.$object->array_options['options_username_os'].'/'.$object->array_options['options_database_db'].' autoscan';
 		$restorestringfromarchive = getDolGlobalString('DOLICLOUD_SCRIPTS_PATH') . '/restore_instance.php ' . getDolGlobalString('SELLYOURSAAS_PAID_ARCHIVES_PATH').'/'.$object->array_options['options_username_os'].'/'.$object->array_options['options_database_db'].' autoscan '.$object->ref_customer.' (test|confirm)';
 
-		$servershorthostname = 'yyy';
 
 		$restorestringfromremotebackup = getDolGlobalString('DOLICLOUD_SCRIPTS_PATH') . '/restore_instance.php remotebackup:/mnt/diskbackup/.snapshots/diskbackup-DAYNUMBER/backup_'.$servershorthostname.'/'.$object->array_options['options_username_os'].' autoscan '.$object->ref_customer.' (test|confirm)';
 		$restorestringfromremotebackup .= "\n".$langs->trans("or")."\n";
@@ -181,7 +199,6 @@ if ($ispaid) {
 		$restorestringfromarchiveshort = getDolGlobalString('DOLICLOUD_SCRIPTS_PATH') . '/restore_instance.php ' . getDolGlobalString('SELLYOURSAAS_TEST_ARCHIVES_PATH').'/'.$object->array_options['options_username_os'].'/'.$object->array_options['options_database_db'].' autoscan ';
 		$restorestringfromarchive = getDolGlobalString('DOLICLOUD_SCRIPTS_PATH') . '/restore_instance.php ' . getDolGlobalString('SELLYOURSAAS_TEST_ARCHIVES_PATH').'/'.$object->array_options['options_username_os'].'/'.$object->array_options['options_database_db'].' autoscan '.$object->ref_customer.' (test|confirm)';
 
-		$servershorthostname = 'yyy';
 
 		$restorestringfromremotebackup = getDolGlobalString('DOLICLOUD_SCRIPTS_PATH') . '/restore_instance.php remotebackup:/mnt/diskbackup/.snapshots/diskbackup-DAYNUMBER/backup_'.$servershorthostname.'/'.$object->array_options['options_username_os'].' autoscan '.$object->ref_customer.' (test|confirm)';
 		$restorestringfromremotebackup .= "\n".$langs->trans("or")."\n";
@@ -230,7 +247,8 @@ $moveinstancestringtoshow .= getDolGlobalString('DOLICLOUD_SCRIPTS_PATH') . '/ma
 //$moveinstancestringtoshow .= "# On src server: gpasswd -d admin www-data\n";
 
 $ducstringtoshow = "duc info -d /mnt/diskhome/home/".$object->array_options['options_username_os']."/.duc.db";
-$ducstringtoshow .= "\nduc ls -R -d /mnt/diskhome/home/".$object->array_options['options_username_os']."/.duc.db /mnt/diskhome/home/".$object->array_options['options_username_os']."/".$object->array_options['options_username_db']."/";
+$ducstringtoshow .= "\nduc ls -R -d /mnt/diskhome/home/".$object->array_options['options_username_os']."/.duc.db /mnt/diskhome/home/".$object->array_options['options_username_os']."/".$object->array_options['options_database_db']."/";
+$ducstringtoshow .= "\nor to update the index:";
 $ducstringtoshow .= "\nduc index /mnt/diskhome/home/".$object->array_options['options_username_os']."/ -x -m 3 -d /mnt/diskhome/home/".$object->array_options['options_username_os']."/.duc.db";
 
 
@@ -256,6 +274,12 @@ $parameters=array('id'=>$id);
 $reshook=$hookmanager->executeHooks('doActions', $parameters, $object, $action);    // Note that $action and $object may have been modified by some hooks
 if ($reshook < 0) {
 	setEventMessages($hookmanager->error, $hookmanager->errors, 'errors');
+}
+
+// Security check - Action needs read permission
+if ($action == 'backupinstance' && ! $user->hasRight('sellyoursaas', 'read')) {
+	setEventMessages($langs->trans("NotEnoughPermissions"), null, 'errors');
+	$action = 'view';
 }
 
 if (empty($reshook)) {
@@ -417,8 +441,8 @@ if ($id > 0 && $action != 'edit' && $action != 'create') {
 	print '<div class="fichecenter">';
 
 	$backupdir = getDolGlobalString('DOLICLOUD_BACKUP_PATH');
-	$backupdirremote = '/mnt/diskbackup/backup_yyy';
-	$backupdirremote2 = '/mnt/diskbackup/.snapshots/diskbackup-xxx/backup_yyy';
+	$backupdirremote = '/mnt/diskbackup/backup_'.$servershorthostname;
+	$backupdirremote2 = '/mnt/diskbackup/.snapshots/diskbackup-xxx/backup_'.$servershorthostname;
 
 	$login = $username_os;
 	$password = $password_os;
@@ -637,7 +661,7 @@ if ($moveinstancestringtoshow) {
 if ($ducstringtoshow) {
 	//$restorestringtoshow=$restorestringfrombackupshort.' nameoftargetinstance (test|confirm)';
 	print '<span class="fa fa-database secondary"></span> Command to list or update disk use <span class="opacitymedium">(to run by root on deployment server)</span><br>';
-	print '<textarea name="ducstring" id="ducstring" class="centpercent" spellcheck="false" rows="'.ROWS_3.'">';
+	print '<textarea name="ducstring" id="ducstring" class="centpercent" spellcheck="false" rows="'.ROWS_4.'">';
 	print $ducstringtoshow;
 	print '</textarea>';
 

@@ -14,18 +14,17 @@ export now=`date +'%Y-%m-%d %H:%M:%S'`
 echo
 echo
 echo "####################################### ${0} ${1}"
-echo "${0} ${@}"
+echo "${0} ${1} ... (other parameters not shown, they contain passwords)"
 echo "# user id --------> $(id -u)"
 echo "# now ------------> $now"
 echo "# PID ------------> ${$}"
-echo "# PWD ------------> $PWD" 
+echo "# PWD ------------> $PWD"
 #echo "# arguments ------> ${@}"
 echo "# parent path ----> ${0%/*}"
 echo "# realname name --> $(basename $(realpath ${0}))"
 echo "# realname dir ---> $(dirname $(realpath ${0}))"
 
 export PID=${$}
-export ZONES_PATH="/etc/bind/zones"
 export scriptdir=$(dirname $(realpath ${0}))
 
 # possibility to change the directory of vhostfile templates
@@ -34,6 +33,11 @@ htdocsdir=`grep '^htdocsdir=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 phpfpm=`grep '^phpfpm=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 phpversion=`grep '^phpversion=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 localip=`grep '^localip=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
+# Not always set in /etc/sellyoursaas.conf: an empty value produces "<VirtualHost :443 :80>",
+# which apache2ctl configtest refuses, so every vhost reload fails on that server.
+if [[ "x$localip" == "x" ]]; then
+	localip="*"
+fi
 if [[ "x$htdocsdir" == "x" ]]; then
 	export htdocsdir="/htdocs"
 fi
@@ -149,6 +153,8 @@ export VIRTUALHOSTHEAD=${35//£/ }
 if [ "x$VIRTUALHOSTHEAD" == "x-" ]; then
 	VIRTUALHOSTHEAD=""
 fi
+# Escape chars that have a special meaning in the replacement of a sed 's;;;' command, to avoid sed injection
+export VIRTUALHOSTHEADFORSED=$(printf '%s' "$VIRTUALHOSTHEAD" | tr -d '\r\n' | sed -e 's/[\\;&]/\\&/g')
 export ispaidinstance=${36}
 export SELLYOURSAAS_LOGIN_FOR_SUPPORT=${37}
 export directaccess=${38}
@@ -190,9 +196,9 @@ fi
 
 
 # possibility to change the path of sellyoursass directory
-olddoldataroot=`grep '^olddoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-newdoldataroot=`grep '^newdoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-if [[ "x$olddoldataroot" != "x" && "x$newdoldataroot" != "x" ]]; then
+olddoldataroot="/home/admin/wwwroot/dolibarr_documents"
+newdoldataroot=`grep '^doldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
+if [[ "x$newdoldataroot" != "x" ]]; then
 	fileforconfig1=${fileforconfig1/$olddoldataroot/$newdoldataroot}
 	dirwithdumpfile=${dirwithdumpfile/$olddoldataroot/$newdoldataroot}
 	dirwithsources1=${dirwithsources1/$olddoldataroot/$newdoldataroot}
@@ -213,11 +219,11 @@ echo "fileforconfig1 = $fileforconfig1"
 echo "targetdir = $targetdir"
 echo "EMAILTO = $EMAILTO"
 echo "REMOTEIP = $REMOTEIP"
-echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL" 
-echo "instancenameold = $instancenameold" 
+echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL"
+echo "instancenameold = $instancenameold"
 echo "domainnameold = $domainnameold"
 echo "customurl = $customurl"
-echo "contractlineid = $contractlineid" 
+echo "contractlineid = $contractlineid"
 echo "EMAILFROM = $EMAILFROM"
 echo "archivedir = $archivedir"
 echo "SSLON = $SSLON"
@@ -239,6 +245,19 @@ testorconfirm="confirm"
 
 # Create/Disable Apache virtual host
 if [[ "$mode" == "deploycustomurl" ]]; then
+
+	# Refuse to enable a vhost for a hostname already served by another enabled vhost (lock released at script exit)
+	#exec 9>/run/lock/sellyoursaas-vhost.lock
+	#flock -x 9
+	#for hostnametocheck in $customurl; do
+	#	for enabledconf in /etc/apache2/sellyoursaas-online/*.conf; do
+	#		[[ -e "$enabledconf" && "$enabledconf" != "/etc/apache2/sellyoursaas-online/$fqn.custom.conf" ]] || continue
+	#		if awk -v requested="${hostnametocheck,,}" 'tolower($1) == "servername" || tolower($1) == "serveralias" { for (i = 2; i <= NF; i++) { h = tolower($i); sub(/:[0-9]+$/, "", h); if (h == requested) found = 1 } } END { exit(found ? 0 : 1) }' "$enabledconf"; then
+	#			echo "Error: hostname $hostnametocheck is already used by the enabled virtual host $enabledconf"
+	#			exit 79
+	#		fi
+	#	done
+	#done
 
 	# Delete old custom conf file
 	export apacheconf="/etc/apache2/sellyoursaas-available/$fqn.custom.conf"
@@ -277,7 +296,7 @@ if [[ "$mode" == "deploycustomurl" ]]; then
 				  sed -e "s/__osUsername__/$osusername/g" | \
 				  sed -e "s/__osGroupname__/$osusername/g" | \
 				  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 				  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 				  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 				  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -287,14 +306,14 @@ if [[ "$mode" == "deploycustomurl" ]]; then
 	export vhostko=$?
 	echo `date +'%Y-%m-%d %H:%M:%S'`" Result of generation of file $apacheconf = $vhostko"
 
-	echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online 
+	echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
 	ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
-	
+
 	echo `date +'%Y-%m-%d %H:%M:%S'`" Restart apache to have the new virtual host working"
 	service apache2 reload
 	if [[ "x$?" != "x0" ]]; then
 		echo Error when running service apache2 reload
-		echo "Failed to restart apache to validate the new virtual host $apacheconf: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in apache reload to enable a new website" $EMAILTO 
+		echo "Failed to restart apache to validate the new virtual host $apacheconf: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in apache reload to enable a new website" $EMAILTO
 		sleep 1
 		exit 20
 	else
@@ -314,10 +333,10 @@ if [[ "$mode" == "deploycustomurl" ]]; then
 	certbot certonly -n -v --webroot -w $instancedir/htdocs/ -d www.$customurl
 	export certko=$?
 	echo `date +'%Y-%m-%d %H:%M:%S'`" Result of generation of cert file for custom url = $certko"
-	
+
 	if [[ "x$?" != "x0" ]]; then
 		echo Error when running certbot certonly --webroot -w $instancedir/htdocs/ -d www.$customurl
-		echo "Failed to generate custom certificate www.$customurl for virtualhost $apacheconf: certbot certonly --webroot -w $instancedir/htdocs/ -d www.$customurl" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in custom certificate generation" $EMAILTO 
+		echo "Failed to generate custom certificate www.$customurl for virtualhost $apacheconf: certbot certonly --webroot -w $instancedir/htdocs/ -d www.$customurl" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in custom certificate generation" $EMAILTO
 		sleep 1
 		exit 20
 	else
@@ -339,7 +358,7 @@ if [[ "$mode" == "deploycustomurl" ]]; then
 
 	if [[ "x$certkeyko" != "x0" ]] || [[ "x$certcrtko" != "x0" ]] || [[ "x$certinterko" != "x0" ]]; then
 		echo Error when linking certificate with error certkeyko=$certkeyko , certcrtko=$certcrtko and certinterko=$certinterko
-		echo "Failed to linking certificate www.$customurl for virtualhost $apacheconf: certkeyko=$certkeyko , certcrtko=$certcrtko and certinterko=$certinterko" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in custom certificate linking" $EMAILTO 
+		echo "Failed to linking certificate www.$customurl for virtualhost $apacheconf: certkeyko=$certkeyko , certcrtko=$certcrtko and certinterko=$certinterko" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in custom certificate linking" $EMAILTO
 		sleep 1
 		exit 20
 	else
@@ -347,16 +366,16 @@ if [[ "$mode" == "deploycustomurl" ]]; then
 	fi
 
 
-	echo `date +'%Y-%m-%d %H:%M:%S'`" Restart apache to have the new certificate beeing loaded"
+	echo `date +'%Y-%m-%d %H:%M:%S'`" Restart apache to have the new certificate being loaded"
 	service apache2 reload
 	if [[ "x$?" != "x0" ]]; then
 		echo Error when running service apache2 reload
-		echo "Failed to restart apache to validate the new virtual host $apacheconf: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in apache reload to enable a new website" $EMAILTO 
+		echo "Failed to restart apache to validate the new virtual host $apacheconf: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in apache reload to enable a new website" $EMAILTO
 		sleep 1
 		exit 20
 	else
 		sleep 3
-	fi	
+	fi
 fi
 
 

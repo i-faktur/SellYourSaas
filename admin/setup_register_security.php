@@ -33,7 +33,7 @@ $res=0;
 if (! $res && ! empty($_SERVER["CONTEXT_DOCUMENT_ROOT"])) {
 	$res=@include $_SERVER["CONTEXT_DOCUMENT_ROOT"]."/main.inc.php";
 }
-// Try main.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try main.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -147,7 +147,9 @@ if ($action == 'set') {
 		if (GETPOSTISSET("SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED")) {
 			dolibarr_set_const($db, "SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED", GETPOST("SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED", 'alpha'), 'chaine', 0, '', $conf->entity);
 		}
-
+		if (getDolGlobalInt("SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED")) {
+			dolibarr_set_const($db, "SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_API_KEY", GETPOST("SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_API_KEY", 'alpha'), 'chaine', 0, '', $conf->entity);
+		}
 
 		// Google recaptcha
 		if (GETPOSTISSET("SELLYOURSAAS_GOOGLE_RECAPTCHA_ON")) {
@@ -166,6 +168,9 @@ if ($action == 'set') {
 		}
 		if (GETPOSTISSET("SELLYOURSAAS_GETIPINTEL_EMAIL")) {
 			dolibarr_set_const($db, "SELLYOURSAAS_GETIPINTEL_EMAIL", GETPOST("SELLYOURSAAS_GETIPINTEL_EMAIL", 'alpha'), 'chaine', 0, '', $conf->entity);
+		}
+		if (GETPOSTISSET("SELLYOURSAAS_VPNDETECTION_ON")) {
+			dolibarr_set_const($db, "SELLYOURSAAS_VPNDETECTION_ON", GETPOST("SELLYOURSAAS_VPNDETECTION_ON", 'alpha'), 'chaine', 0, '', $conf->entity);
 		}
 		if (GETPOSTISSET("SELLYOURSAAS_IPQUALITY_ON")) {
 			dolibarr_set_const($db, "SELLYOURSAAS_IPQUALITY_ON", GETPOST("SELLYOURSAAS_IPQUALITY_ON", 'alpha'), 'chaine', 0, '', $conf->entity);
@@ -192,6 +197,12 @@ if ($action == 'set') {
 		dolibarr_set_const($db, "SELLYOURSAAS_HASHALGOFORPASSWORD", GETPOST("SELLYOURSAAS_HASHALGOFORPASSWORD", 'alpha'), 'chaine', 0, '', $conf->entity);
 		dolibarr_set_const($db, "SELLYOURSAAS_SALTFORPASSWORDENCRYPTION", GETPOST("SELLYOURSAAS_SALTFORPASSWORDENCRYPTION", 'alpha'), 'chaine', 0, '', $conf->entity);
 
+		$magiclinkkey = GETPOST("SELLYOURSAAS_KEYFORHASH", 'alpha');
+		if ($magiclinkkey != '' && dol_strlen($magiclinkkey) < 32) {
+			setEventMessages($langs->trans("SELLYOURSAAS_KEYFORHASHTooShort"), null, 'warnings');
+		}
+		dolibarr_set_const($db, "SELLYOURSAAS_KEYFORHASH", $magiclinkkey, 'chaine', 0, '', $conf->entity);
+
 		dolibarr_set_const($db, "SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY", GETPOST("SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY", 'alpha'), 'chaine', 0, '', $conf->entity);
 
 		dolibarr_set_const($db, "SELLYOURSAAS_SSH2_HOSTKEYALGO", GETPOST("SELLYOURSAAS_SSH2_HOSTKEYALGO", 'alpha'), 'chaine', 0, '', $conf->entity);
@@ -203,6 +214,22 @@ if ($action == 'set') {
 	}
 	if (! $error) {
 		setEventMessages($langs->trans("SetupSaved"), null, 'mesgs');
+	}
+}
+
+// Generate a new random key after confirmation
+if (($action == 'confirm_setnewkeyforhash' || $action == 'confirm_setnewremoteactionsignaturekey') && GETPOST('confirm', 'alpha') == 'yes') {
+	include_once DOL_DOCUMENT_ROOT.'/core/lib/security2.lib.php';
+
+	if ($action == 'confirm_setnewkeyforhash') {
+		$result = dolibarr_set_const($db, "SELLYOURSAAS_KEYFORHASH", getRandomPassword(true, null, 64), 'chaine', 0, '', $conf->entity);
+	} else {
+		$result = dolibarr_set_const($db, "SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY", getRandomPassword(true), 'chaine', 0, '', $conf->entity);
+	}
+	if ($result > 0) {
+		setEventMessages($langs->trans("SetupSaved"), null, 'mesgs');
+	} else {
+		setEventMessages($langs->trans("Error"), null, 'errors');
 	}
 }
 
@@ -218,7 +245,8 @@ $formticket = new FormTicket($db);
 $help_url="";
 llxHeader("", $langs->trans("SellYouSaasSetup"), $help_url);
 
-$linkback='<a href="'.($backtopage ? $backtopage : DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1').'">'.$langs->trans("BackToModuleList").'</a>';
+$linkback = '<a href="'.($backtopage ? $backtopage : DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1').'">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
+
 print_fiche_titre($langs->trans('SellYouSaasSetup'), $linkback, 'setup');
 
 $error=0;
@@ -291,9 +319,9 @@ if ($conf->use_javascript_ajax) {
 	print ajax_constantonoff('SELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL', array(), null, 0, 0, 1);
 } else {
 	if (!getDolGlobalString('SELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
 	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
 	}
 }
 print '</td>';
@@ -301,7 +329,7 @@ print '<td></td>';
 print '</tr>';
 
 // Option to allow the selection of the service
-/* To do this, just use several servive keys as parameter plan= of the register URL
+/* To do this, just use several service keys as parameter plan= of the register URL
 print '<tr class="oddeven"><td>';
 print $form->textwithpicto($langs->trans("SELLYOURSAAS_ALLOW_SELECTION_OF_SERVICE"), $langs->trans("SELLYOURSAAS_ALLOW_SELECTION_OF_SERVICEHelp"));
 print '</td>';
@@ -310,9 +338,9 @@ if ($conf->use_javascript_ajax) {
 	print ajax_constantonoff('SELLYOURSAAS_ALLOW_SELECTION_OF_SERVICE', array(), null, 0, 0, 1);
 } else {
 	if (!getDolGlobalString('SELLYOURSAAS_ALLOW_SELECTION_OF_SERVICE')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_ALLOW_SELECTION_OF_SERVICE">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_ALLOW_SELECTION_OF_SERVICE&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
 	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_ALLOW_SELECTION_OF_SERVICE">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_ALLOW_SELECTION_OF_SERVICE&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
 	}
 }
 print '</td>';
@@ -389,15 +417,15 @@ print '<td></td>';
 print '<td></td>';
 print "</tr>\n";
 
-print '<tr class="oddeven"><td>'.$form->textwithpicto($langs->trans("SELLYOURSAAS_GOOGLE_RECAPTCHA_ON"), 'This is a usefull component to fight against spam instances').'</td>';
+print '<tr class="oddeven"><td>'.$form->textwithpicto($langs->trans("SELLYOURSAAS_GOOGLE_RECAPTCHA_ON"), 'This is a useful component to fight against spam instances').'</td>';
 print '<td>';
 if ($conf->use_javascript_ajax) {
 	print ajax_constantonoff('SELLYOURSAAS_GOOGLE_RECAPTCHA_ON', array(), null, 0, 0, 1);
 } else {
 	if (!getDolGlobalString('SELLYOURSAAS_GETIPINTEL_ON')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_GOOGLE_RECAPTCHA_ON">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_GOOGLE_RECAPTCHA_ON&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
 	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_GOOGLE_RECAPTCHA_ON">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_GOOGLE_RECAPTCHA_ON&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
 	}
 }
 print '</td>';
@@ -439,15 +467,15 @@ print '<td></td>';
 print '<td></td>';
 print "</tr>\n";
 
-print '<tr class="oddeven"><td>'.$form->textwithpicto($langs->trans("SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED"), 'This is a usefull component to fight against spam instances').'</td>';
+print '<tr class="oddeven"><td>'.$form->textwithpicto($langs->trans("SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED"), 'This is a useful component to fight against spam instances').'</td>';
 print '<td>';
 if ($conf->use_javascript_ajax) {
 	print ajax_constantonoff('SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED', array(), null, 0, 0, 1);
 } else {
 	if (!getDolGlobalString('SELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
 	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_BLOCK_DISPOSABLE_EMAIL_ENABLED&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
 	}
 }
 print '</td>';
@@ -471,15 +499,15 @@ print '<td></td>';
 print '<td></td>';
 print "</tr>\n";
 
-print '<tr class="oddeven"><td>'.$form->textwithpicto($langs->trans("SELLYOURSAAS_GETIPINTEL_ON"), 'This is a usefull component to fight against spam instances').'</td>';
+print '<tr class="oddeven"><td>'.$form->textwithpicto($langs->trans("SELLYOURSAAS_GETIPINTEL_ON"), 'This is a useful component to fight against spam instances').'</td>';
 print '<td>';
 if ($conf->use_javascript_ajax) {
 	print ajax_constantonoff('SELLYOURSAAS_GETIPINTEL_ON', array(), null, 0, 0, 1);
 } else {
 	if (!getDolGlobalString('SELLYOURSAAS_GETIPINTEL_ON')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_GETIPINTEL_ON">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_GETIPINTEL_ON&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
 	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_GETIPINTEL_ON">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_GETIPINTEL_ON&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
 	}
 }
 print '</td>';
@@ -496,6 +524,29 @@ if (getDolGlobalString('SELLYOURSAAS_GETIPINTEL_ON')) {
 }
 
 
+// Enable VPNDetection
+print '<tr class="liste_titre">';
+print '<td>VPNDetection (free)</td>';
+print '<td></td>';
+print '<td></td>';
+print "</tr>\n";
+
+print '<tr class="oddeven"><td>'.$form->textwithpicto($langs->trans("SELLYOURSAAS_VPNDETECTION_ON"), 'This is a useful component to fight against spam instances').'</td>';
+print '<td>';
+if ($conf->use_javascript_ajax) {
+	print ajax_constantonoff('SELLYOURSAAS_VPNDETECTION_ON', array(), null, 0, 0, 1);
+} else {
+	if (!getDolGlobalString('SELLYOURSAAS_VPNDETECTION_ON')) {
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_VPNDETECTION_ON&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+	} else {
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_VPNDETECTION_ON&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+	}
+}
+print '</td>';
+print '<td></td>';
+print '</tr>';
+
+
 // Enable IPQualityScore
 print '<tr class="liste_titre">';
 print '<td>IPQuality</td>';
@@ -509,9 +560,9 @@ if ($conf->use_javascript_ajax) {
 	print ajax_constantonoff('SELLYOURSAAS_IPQUALITY_ON', array(), null, 0, 0, 1);
 } else {
 	if (!getDolGlobalString('SELLYOURSAAS_IPQUALITY_ON')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_IPQUALITY_ON">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=setSELLYOURSAAS_IPQUALITY_ON&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
 	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_IPQUALITY_ON">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=delSELLYOURSAAS_IPQUALITY_ON&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
 	}
 }
 print '</td>';
@@ -527,7 +578,7 @@ if (getDolGlobalString('SELLYOURSAAS_IPQUALITY_ON')) {
 	print '</tr>';
 }
 
-if (getDolGlobalString('SELLYOURSAAS_GETIPINTEL_ON') || getDolGlobalString('SELLYOURSAAS_IPQUALITY_ON')) {
+if (getDolGlobalString('SELLYOURSAAS_GETIPINTEL_ON') || getDolGlobalString('SELLYOURSAAS_VPNDETECTION_ON') || getDolGlobalString('SELLYOURSAAS_IPQUALITY_ON')) {
 	print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_VPN_PROBA_REFUSED").'</td>';
 	print '<td>';
 	print '<input class="maxwidth50" type="text" name="SELLYOURSAAS_VPN_PROBA_REFUSED" value="'.getDolGlobalString('SELLYOURSAAS_VPN_PROBA_REFUSED').'">';
@@ -543,18 +594,46 @@ if (getDolGlobalString('SELLYOURSAAS_GETIPINTEL_ON') || getDolGlobalString('SELL
 	print '</tr>';
 }
 
+// Key to generate the magic login links to the customer dashboard
+print '<tr class="liste_titre"><td colspan="3">Seed to generate the login the Magic Link for admin to connect to a user dashboard</td></tr>';
+
+print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_KEYFORHASH").'</td>';
+print '<td class="nowraponall">';
+print '<input type="password" class="width300" name="SELLYOURSAAS_KEYFORHASH" id="SELLYOURSAAS_KEYFORHASH" value="'.dolPrintHTMLForAttribute(getDolGlobalString('SELLYOURSAAS_KEYFORHASH')).'" autocomplete="new-password" spellcheck="false">';
+include_once DOL_DOCUMENT_ROOT.'/core/lib/security2.lib.php';
+if (function_exists('showEyeForField')) {
+	print '&nbsp;'.showEyeForField('eyeSELLYOURSAAS_KEYFORHASH', 'SELLYOURSAAS_KEYFORHASH');
+}
+if (!empty($conf->use_javascript_ajax) && empty($conf->dol_use_jmobile)) {
+	print '&nbsp;'.img_picto($langs->trans('Generate'), 'refresh', 'id="generate_keyforhash" class="linkobject"');
+	// Add a confirmation popup before generating and saving a new key
+	print $form->formconfirm($_SERVER["PHP_SELF"], $langs->trans('Generate'), $langs->trans('ConfirmGenerateNewKeyForHash'), 'confirm_setnewkeyforhash', '', 0, 'generate_keyforhash', 0, 500);
+}
+print '</td>';
+print '<td><span class="opacitymedium small">'.$langs->trans("SELLYOURSAAS_KEYFORHASHDesc").'</span></td>';
+print '</tr>';
+
 // Key to sign message on each deployment servers
 print '<tr class="liste_titre"><td colspan="3">Security for communication from master to deployment servers (Deprecated. Use instead a different key on each deployment server)</td></tr>';
 
 print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY").'</td>';
-print '<td>';
-print '<input type="text" class="width300" name="SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY" id="SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY" value="'.getDolGlobalString('SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY').'">';
+print '<td class="nowraponall">';
+print '<input type="password" class="width300" name="SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY" id="SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY" value="'.dolPrintHTMLForAttribute(getDolGlobalString('SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY')).'" autocomplete="new-password" spellcheck="false">';
+if (function_exists('showEyeForField')) {
+	print '&nbsp;'.showEyeForField('eyeSELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY', 'SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY');
+}
 if (!empty($conf->use_javascript_ajax)) {
-	// TODO Set the type of input in password and add a button "show"
-	print '&nbsp;'.img_picto($langs->trans('Generate'), 'refresh', 'id="generate_token" class="linkobject"');
-	// Add button to autosuggest a key
-	include_once DOL_DOCUMENT_ROOT.'/core/lib/security2.lib.php';
-	print dolJSToSetRandomPassword("SELLYOURSAAS_REMOTE_ACTION_SIGNATURE_KEY", "generate_token");
+	/*
+	print "\n<br>aaa&amp;b<b>b</b>b => \n";
+	print dolPrintHTMLForAttribute('aaa&amp;b<b>b</b>b');
+	print "\n<br>aaa&bbb => \n";
+	print dolPrintHTMLForAttribute('aaa&bbb');
+	*/
+	if (empty($conf->dol_use_jmobile)) {
+		print '&nbsp;'.img_picto($langs->trans('Generate'), 'refresh', 'id="generate_token" class="linkobject"');
+		// Add a confirmation popup before generating and saving a new key
+		print $form->formconfirm($_SERVER["PHP_SELF"], $langs->trans('Generate'), $langs->trans('ConfirmGenerateNewRemoteActionSignatureKey'), 'confirm_setnewremoteactionsignaturekey', '', 0, 'generate_token', 0, 500);
+	}
 }
 print '</td>';
 print '<td><span class="opacitymedium small">Define a value to add a security signature of messages. This key must also be added into all deployment servers into file /etc/sellyoursaas.conf on key "signature_key=..."</span></td>';

@@ -20,11 +20,11 @@ export nowfile=`date +'%Y%m%d-%H%M%S'`
 echo
 echo
 echo "####################################### ${0} ${1}"
-echo "${0} ${@}"
+echo "${0} ${1} ... (other parameters not shown, they contain passwords)"
 echo "# user id --------> $(id -u)"
 echo "# now ------------> $now"
 echo "# PID ------------> ${$}"
-echo "# PWD ------------> $PWD" 
+echo "# PWD ------------> $PWD"
 #echo "# arguments ------> ${@}"
 echo "# parent path ----> ${0%/*}"
 echo "# realname name --> $(basename $(realpath ${0}))"
@@ -39,6 +39,11 @@ templatesdir=`grep '^templatesdir=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 phpfpm=`grep '^phpfpm=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 phpversion=`grep '^phpversion=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 localip=`grep '^localip=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
+# Not always set in /etc/sellyoursaas.conf: an empty value produces "<VirtualHost :443 :80>",
+# which apache2ctl configtest refuses, so every vhost reload fails on that server.
+if [[ "x$localip" == "x" ]]; then
+	localip="*"
+fi
 if [[ "x$templatesdir" != "x" ]]; then
   if [[ "x$phpfpm" != "x" ]]; then
     export vhostfile="$templatesdir/vhostHttps-phpfpm-sellyoursaas.template"
@@ -152,7 +157,7 @@ if [ "x$customurl" == "x-" ]; then
 fi
 export contractlineid=${28}
 export EMAILFROM=${29}
-# CERTIFFORCUSTOMDOMAIN. Example: withY.mysaasdomain.com, myowndomain.com 
+# CERTIFFORCUSTOMDOMAIN. Example: withY.mysaasdomain.com, myowndomain.com
 export CERTIFFORCUSTOMDOMAIN=${30}
 if [ "x$CERTIFFORCUSTOMDOMAIN" == "x-" ]; then
 	CERTIFFORCUSTOMDOMAIN=""
@@ -168,6 +173,8 @@ export VIRTUALHOSTHEAD=${35//£/ }
 if [ "x$VIRTUALHOSTHEAD" == "x-" ]; then
 	VIRTUALHOSTHEAD=""
 fi
+# Escape chars that have a special meaning in the replacement of a sed 's;;;' command, to avoid sed injection
+export VIRTUALHOSTHEADFORSED=$(printf '%s' "$VIRTUALHOSTHEAD" | tr -d '\r\n' | sed -e 's/[\\;&]/\\&/g')
 export ispaidinstance=${36}
 export SELLYOURSAAS_LOGIN_FOR_SUPPORT=${37}
 export directaccess=${38}
@@ -178,6 +185,7 @@ if [ "x$INCLUDEFROMCONTRACT" == "x-" ]; then
 fi
 
 export CUSTOMDOMAIN=${46}
+export cliafterdeployoption=${49}
 
 
 
@@ -205,9 +213,9 @@ fi
 export usecompressformatforarchive=`grep '^usecompressformatforarchive=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 
 # possibility to change the path of sellyoursass directory
-olddoldataroot=`grep '^olddoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-newdoldataroot=`grep '^newdoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-if [[ "x$olddoldataroot" != "x" && "x$newdoldataroot" != "x" ]]; then
+olddoldataroot="/home/admin/wwwroot/dolibarr_documents"
+newdoldataroot=`grep '^doldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
+if [[ "x$newdoldataroot" != "x" ]]; then
 	fileforconfig1=${fileforconfig1/$olddoldataroot/$newdoldataroot}
 	dirwithdumpfile=${dirwithdumpfile/$olddoldataroot/$newdoldataroot}
 	dirwithsources1=${dirwithsources1/$olddoldataroot/$newdoldataroot}
@@ -215,6 +223,7 @@ if [[ "x$olddoldataroot" != "x" && "x$newdoldataroot" != "x" ]]; then
 	dirwithsources3=${dirwithsources3/$olddoldataroot/$newdoldataroot}
 	cronfile=${cronfile/$olddoldataroot/$newdoldataroot}
 	cliafter=${cliafter/$olddoldataroot/$newdoldataroot}
+	cliafterdeployoption=${cliafterdeployoption/$olddoldataroot/$newdoldataroot}
 fi
 
 # For debug
@@ -242,11 +251,11 @@ echo "cliafter = $cliafter"
 echo "targetdir = $targetdir"
 echo "EMAILTO = $EMAILTO"
 echo "REMOTEIP = $REMOTEIP"
-echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL" 
-echo "instancenameold = $instancenameold" 
-echo "domainnameold = $domainnameold" 
-echo "customurl = $customurl" 
-echo "contractlineid = $contractlineid" 
+echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL"
+echo "instancenameold = $instancenameold"
+echo "domainnameold = $domainnameold"
+echo "customurl = $customurl"
+echo "contractlineid = $contractlineid"
 echo "EMAILFROM = $EMAILFROM"
 echo "CERTIFFORCUSTOMDOMAIN = $CERTIFFORCUSTOMDOMAIN"
 echo "archivedir = $archivedir"
@@ -281,32 +290,32 @@ echo "Search database server name and port for deployment server in /etc/sellyou
 dbserverhost=`grep '^databasehostdeployment=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 if [[ "x$dbserverhost" == "x" ]]; then
 	dbserverhost="localhost"
-fi 
+fi
 dbserverport=`grep '^databaseportdeployment=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 if [[ "x$dbserverport" == "x" ]]; then
 	dbserverport="3306"
 fi
 
-echo "Search admin database credential for deployement server in /etc/sellyoursaas.conf"
+echo "Search admin database credential for deployment server in /etc/sellyoursaas.conf"
 dbadminuser=`grep '^databaseuserdeployment=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 if [[ "x$dbadminuser" == "x" ]]; then
 	dbadminuser="sellyoursaas"
-fi 
+fi
 dbadminpass=`grep '^databasepassdeployment=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 if [[ "x$dbadminpass" == "x" ]]; then
 	dbadminpass=`grep '^databasepass=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 	if [[ "x$dbadminpass" == "x" ]]; then
-		echo Failed to get password for mysql admin user 
+		echo Failed to get password for mysql admin user
 		exit 10
 	fi
-fi 
+fi
 dbforcesetpassword=`grep '^dbforcesetpassword=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 if [[ "x$dbforcesetpassword" == "x" ]]; then
 	dbforcesetpassword="0"
 fi
 dnsserver=`grep '^dnsserver=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 if [[ "x$dnsserver" == "x" ]]; then
-	echo Failed to get dns server parameters 
+	echo Failed to get dns server parameters
 	exit 11
 fi
 
@@ -328,11 +337,11 @@ testorconfirm="confirm"
 if [[ "$mode" == "deployall" ]]; then
 
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create user $osusername with home into $targetdir/$osusername"
-	
+
 	id -u $osusername
 	notfound=$?
 	echo notfound=$notfound
-	
+
 	if [[ $notfound == 0 ]]
 	then
 		echo "$osusername seems to already exists"
@@ -340,10 +349,10 @@ if [[ "$mode" == "deployall" ]]; then
 		echo "perl -e'print crypt(\"'XXXXXX'\", "saltsalt")'"
 		export passcrypted=`perl -e'print crypt("'$ospassword'", "saltsalt")'`
 		echo "useradd -m -d $targetdir/$osusername -p 'YYYYYY' -s '/bin/secureBash' $osusername"
-		useradd -m -d $targetdir/$osusername -p "$passcrypted" -s '/bin/secureBash' $osusername 
+		useradd -m -d $targetdir/$osusername -p "$passcrypted" -s '/bin/secureBash' $osusername
 		if [[ "$?x" != "0x" ]]; then
-			echo Error failed to create user $osusername 
-			echo "Failed to deployall instance $instancename.$domainname with: useradd -m -d $targetdir/$osusername -p $ospassword -s '/bin/secureBash' $osusername" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO
+			echo Error failed to create user $osusername
+			echo "Failed to deployall instance $instancename.$domainname with: useradd -m -d $targetdir/$osusername -p XXXXXX -s '/bin/secureBash' $osusername" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO
 			exit 13
 		fi
 		chmod -R go-rwx $targetdir/$osusername
@@ -356,7 +365,7 @@ if [[ "$mode" == "deployall" ]]; then
 		mkdir $targetdir/$osusername
 		chmod -R go-rwx $targetdir/$osusername
 	fi
-	
+
 	if [[ "$sshaccesstype" > "0" ]]; then
 		if [[ ! -f "/etc/jailkit/jk_init.ini" ]]; then
 			echo "Error failed to find jailkit package in your system"
@@ -369,15 +378,15 @@ if [[ "$mode" == "deployall" ]]; then
 					echo "Create $chrootdir directory"
 					mkdir $chrootdir
 				fi
-				
+
 				privatejailtemplatename=`grep '^privatejailtemplatename=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
 				commonjailtemplatename=`grep '^commonjailtemplatename=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-				
+
 				echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create jailkit chroot directory for user $osusername"
 				echo "chrootdir = $chrootdir"
 				echo "privatejailtemplatename = $privatejailtemplatename"
 				echo "commonjailtemplatename = $commonjailtemplatename"
-				
+
 				# Common users jail
 				if [[ "$sshaccesstype" == "1" ]]; then
 					if [[ "x$commonjailtemplatename" == "x" ]]; then
@@ -472,12 +481,12 @@ fi
 if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 
 	echo rm -f $targetdir/$osusername/$dbname/*.log
-	rm -f $targetdir/$osusername/$dbname/*.log >/dev/null 2>&1 
+	rm -f $targetdir/$osusername/$dbname/*.log >/dev/null 2>&1
 	echo rm -f $targetdir/$osusername/$dbname/*.log.*
-	rm -f $targetdir/$osusername/$dbname/*.log.* >/dev/null 2>&1 
-	
+	rm -f $targetdir/$osusername/$dbname/*.log.* >/dev/null 2>&1
+
 	if [[ "$sshaccesstype" > "0" ]]; then
-		
+
 		if [[ ! -f "/etc/jailkit/jk_init.ini" ]]; then
 			echo "Error failed to find jailkit package in your system"
 		else
@@ -486,13 +495,13 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 				Error your jailkit chroot directory is not defined in sellyoursaas.conf
 			else
 				if [[ -d "$chrootdir" ]]; then
-				
+
 					commonjailtemplatename=`grep '^commonjailtemplatename=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-					
+
 					echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Remove jailkit chroot directory for user $osusername"
 					echo "chrootdir = $chrootdir"
 					echo "commonjailtemplatename = $commonjailtemplatename"
-					
+
 					# Common users jail
 					if [[ "$sshaccesstype" == "1" ]]; then
 						if [[ "x$commonjailtemplatename" == "x" ]]; then
@@ -545,9 +554,9 @@ fi
 if [[ "$dnsserver" == "1" ]]; then
 
 	if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
-	
-		export ZONE="$domainname.hosts" 
-		
+
+		export ZONE="$domainname.hosts"
+
 		#$ttl 1d
 		#$ORIGIN with.dolicloud.com.
 		#@               IN     SOA   ns1with.dolicloud.com. admin.dolicloud.com. (
@@ -567,22 +576,22 @@ if [[ "$dnsserver" == "1" ]]; then
 		#$ORIGIN with.dolicloud.com.
 		#
 		#; other sub-domain records
-	
+
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Add DNS entry for $instancename in $domainname - Test with cat /etc/bind/${ZONE} | grep '^$instancename ' 2>&1"
-	
+
 		cat /etc/bind/${ZONE} | grep "^$instancename " 2>&1
 		notfound=$?
 		echo notfound=$notfound
-	
+
 		if [[ $notfound == 0 ]]; then
 			echo "entry $instancename already found into host /etc/bind/${ZONE}"
 		else
 			echo "cat /etc/bind/${ZONE} | grep -v '^$instancename ' > /tmp/${ZONE}.$PID"
 			cat /etc/bind/${ZONE} | grep -v "^$instancename " > /tmp/${ZONE}.$PID
-	
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Add $instancename A $REMOTEIP into tmp host file"
-			echo $instancename A $REMOTEIP >> /tmp/${ZONE}.$PID  
-	
+			echo $instancename A $REMOTEIP >> /tmp/${ZONE}.$PID
+
 			# we're looking line containing this comment
 			export DATE=`date +%y%m%d%H`
 			export NEEDLE="serial"
@@ -609,26 +618,30 @@ if [[ "$dnsserver" == "1" ]]; then
 			fi
 			echo Replace serial in /tmp/${ZONE}.$PID with ${serial}
 			/bin/sed -i -e "s/^\(\s*\)[0-9]\{0,\}\(\s*;\s*${NEEDLE}\)$/\1${serial}\2/" /tmp/${ZONE}.$PID
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" Test temporary file with named-checkzone $domainname /tmp/${ZONE}.$PID"
-			
+
 			named-checkzone $domainname /tmp/${ZONE}.$PID
 			if [[ "$?x" != "0x" ]]; then
 				echo Error when editing the DNS file during a deployment. File /tmp/${ZONE}.$PID is not valid. Sending email to $EMAILFROM
-				echo "Failed to deployall instance $instancename.$domainname with: Error when editing the DNS file. File /tmp/${ZONE}.$PID is not valid" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO 
+				echo "Failed to deployall instance $instancename.$domainname with: Error when editing the DNS file. File /tmp/${ZONE}.$PID is not valid" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO
 				exit 16
 			fi
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Archive file with cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowfile"
 			cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowfile
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Move new host file"
 			mv -fu /tmp/${ZONE}.$PID /etc/bind/${ZONE}
-			
+
+			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Restore ownership and permission of zone file, lost by the mv (mv keeps umask permission of the tmp file)"
+			chown root:bind /etc/bind/${ZONE}
+			chmod 644 /etc/bind/${ZONE}
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Reload dns with rndc reload $domainname"
 			rndc reload $domainname
 			#/etc/init.d/bind9 reload
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" **** nslookup $fqn 127.0.0.1"
 			nslookup $fqn 127.0.0.1
 			if [[ "$?x" != "0x" ]]; then
@@ -637,32 +650,32 @@ if [[ "$dnsserver" == "1" ]]; then
 				nslookup $fqn 127.0.0.1
 				if [[ "$?x" != "0x" ]]; then
 					echo Error after reloading DNS. nslookup of $fqn fails on second try too.
-					echo "Failed to deployall instance $instancename.$domainname with: Error after reloading DNS. nslookup of $fqn fails of 2 tries." | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO 
+					echo "Failed to deployall instance $instancename.$domainname with: Error after reloading DNS. nslookup of $fqn fails of 2 tries." | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO
 					exit 17
 				fi
-			fi 
+			fi
 		fi
 	fi
-	
+
 	if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
-	
-		export ZONE="$domainname.hosts" 
-	
+
+		export ZONE="$domainname.hosts"
+
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Remove DNS entry for $instancename in $domainname - Test with cat /etc/bind/${ZONE} | grep '^$instancename '"
-	
+
 		cat /etc/bind/${ZONE} | grep "^$instancename " 2>&1
 		notfound=$?
 		echo notfound=$notfound
-	
+
 		if [[ $notfound == 1 ]]; then
 			echo `date +'%Y-%m-%d %H:%M:%S'`" entry $instancename already not found into host /etc/bind/${ZONE}"
 		else
 			echo "cat /etc/bind/${ZONE} | grep -v '^$instancename ' > /tmp/${ZONE}.$PID"
 			cat /etc/bind/${ZONE} | grep -v "^$instancename " > /tmp/${ZONE}.$PID
-	
+
 			#echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Add $instancename A $REMOTEIP into tmp host file"
-			#echo $instancename A $REMOTEIP >> /tmp/${ZONE}.$PID  
-	
+			#echo $instancename A $REMOTEIP >> /tmp/${ZONE}.$PID
+
 			# we're looking line containing this comment
 			export DATE=`date +%y%m%d%H`
 			export NEEDLE="serial"
@@ -684,35 +697,39 @@ if [[ "$dnsserver" == "1" ]]; then
 			fi
 			echo Replace serial in /tmp/${ZONE}.$PID with ${serial}
 			/bin/sed -i -e "s/^\(\s*\)[0-9]\{0,\}\(\s*;\s*${NEEDLE}\)$/\1${serial}\2/" /tmp/${ZONE}.$PID
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" Test temporary file with named-checkzone $domainname /tmp/${ZONE}.$PID"
-			
+
 			named-checkzone $domainname /tmp/${ZONE}.$PID
 			if [[ "$?x" != "0x" ]]; then
-				echo Error when editing the DNS file un undeployment. File /tmp/${ZONE}.$PID is not valid 
+				echo Error when editing the DNS file un undeployment. File /tmp/${ZONE}.$PID is not valid
 				echo "Failed to deployall instance $instancename.$domainname with: Error when editing the DNS file. File /tmp/${ZONE}.$PID is not valid" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO
 				exit 18
 			fi
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Archive file with cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowfile"
 			cp /etc/bind/${ZONE} /etc/bind/archives/${ZONE}-$nowfile
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Move new host file with mv -fu /tmp/${ZONE}.$PID /etc/bind/${ZONE}"
 			mv -fu /tmp/${ZONE}.$PID /etc/bind/${ZONE}
-			
+
+			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Restore ownership and permission of zone file, lost by the mv (mv keeps umask permission of the tmp file)"
+			chown root:bind /etc/bind/${ZONE}
+			chmod 644 /etc/bind/${ZONE}
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" **** Reload dns with rndc reload $domainname"
 			rndc reload $domainname
 			#/etc/init.d/bind9 reload
-			
+
 			#echo `date +'%Y-%m-%d %H:%M:%S'`" **** nslookup $fqn 127.0.0.1"
 			#nslookup $fqn 127.0.0.1
 			#if [[ "$?x" != "0x" ]]; then
-			#	echo Error after reloading DNS. nslookup of $fqn fails. 
+			#	echo Error after reloading DNS. nslookup of $fqn fails.
 			#	echo "Failed to deployall instance $instancename.$domainname with: Error after reloading DNS. nslookup of $fqn fails. " | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO
 			#	exit 1
-			#fi 
+			#fi
 		fi
-	
+
 	fi
 
 fi
@@ -723,37 +740,37 @@ fi
 if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption" ]]; then
 
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Deploy files"
-	
+
 	echo "Create dir for instance = $targetdir/$osusername/$dbname"
 	mkdir -p $targetdir/$osusername/$dbname
-	
+
 	echo `date +'%Y-%m-%d %H:%M:%S'`" Check dirwithsources1=$dirwithsources1 targetdirwithsources1=$targetdirwithsources1"
 	if [ -d $dirwithsources1 ]; then
 		if [[ "x$targetdirwithsources1" != "x" ]]; then
 			mkdir -p $targetdirwithsources1
-			
+
 			# Check local cache
-			
+			echo "Remote cache file (archive on NFS dir) should be: $dirwithsources1.tar.zst"
 			if [ -f "$dirwithsources1.tar.zst" ]; then
 				datesource=`date -r $dirwithsources1.tar.zst +"%Y%m%d"`
 			else
 				datesource=0
 			fi
-			
+
 			if [ -f "/tmp/cache$dirwithsources1.tar.zst" ]; then
 				datecache=`date -r /tmp/cache$dirwithsources1.tar.zst +"%Y%m%d"`
 			else
 				if [ -f "/tmp/cache$dirwithsources1.tgz" ]; then
 					datecache=`date -r /tmp/cache$dirwithsources1.tgz +"%Y%m%d"`
-				else 
+				else
 					datecache=0
 				fi
 			fi
-			
+
 			datecachets=$(date -d "${datecache}" +%s)
 			now=$(date +%s)
 			datecacheage=$(( (now - datecachets) / 86400 ))
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" datesource (archive on NFS dir)=$datesource - datecache (archive on local dir)=$datecache - age of datecache=$datecacheage"
 
 			if [ $datecache -eq 0 -o $datesource -gt $datecache -o "$datecacheage" -gt 7 ]; then
@@ -762,7 +779,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 				#echo "cp -r $dirwithsources1/. /tmp/cache$dirwithsources1"
 
 				if [[ -f $dirwithsources1.tar.zst ]]; then
-					# Archive file available into the NFS remote directory /home/admin/wwwroot/dolibarr_documents/sellyoursaas/git, so we copy it locally into /tmp/... 
+					# Archive file available into the NFS remote directory /home/admin/wwwroot/dolibarr_documents/sellyoursaas/git, so we copy it locally into /tmp/...
 					echo "cp $dirwithsources1.tar.zst  /tmp/cache$dirwithsources1.tar.zst"
 					cp $dirwithsources1.tar.zst  /tmp/cache$dirwithsources1.tar.zst
 				else
@@ -774,9 +791,9 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 						echo "tar c -I gzip --exclude-vcs --exclude-from=$scriptdir/git_update_sources.exclude -f /tmp/cache$dirwithsources1.tgz ."
 						#cp -r $dirwithsources1/. $targetdirwithsources1
 						tar c -I gzip --exclude-vcs --exclude-from=$scriptdir/git_update_sources.exclude -f /tmp/cache$dirwithsources1.tgz .
-					fi			
+					fi
 				fi
-			fi 
+			fi
 
 			if [[ -f /tmp/cache$dirwithsources1.tar.zst ]]; then
 				echo `date +'%Y-%m-%d %H:%M:%S'`" Local zst cache found for src 1. We use it with: tar -I zstd -xf /tmp/cache$dirwithsources1.tar.zst --directory $targetdirwithsources1/"
@@ -798,7 +815,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 	if [ -d $dirwithsources2 ]; then
 		if [[ "x$targetdirwithsources2" != "x" ]]; then
 			mkdir -p $targetdirwithsources2
-			
+
 			# Check local cache
 
 			if [ -f "$dirwithsources2.tar.zst" ]; then
@@ -806,21 +823,21 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 			else
 				datesource=0
 			fi
-			
+
 			if [ -f "/tmp/cache$dirwithsources2.tar.zst" ]; then
 				datecache=`date -r /tmp/cache$dirwithsources2.tar.zst +"%Y%m%d"`
 			else
 				if [ -f "/tmp/cache$dirwithsources2.tgz" ]; then
 					datecache=`date -r /tmp/cache$dirwithsources2.tgz +"%Y%m%d"`
-				else 
+				else
 					datecache=0
 				fi
 			fi
-			
+
 			datecachets=$(date -d "${datecache}" +%s)
 			now=$(date +%s)
 			datecacheage=$(( (now - datecachets) / 86400 ))
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" datesource (archive on NFS dir)=$datesource - datecache (archive on local dir)=$datecache - age of datecache=$datecacheage"
 
 			if [ $datecache -eq 0 -o $datesource -gt $datecache -o "$datecacheage" -gt 7 ]; then
@@ -829,7 +846,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 				#echo "cp -r $dirwithsources2/. /tmp/cache$dirwithsources2"
 
 				if [[ -f $dirwithsources2.tar.zst ]]; then
-					# Archive file available into the NFS remote directory /home/admin/wwwroot/dolibarr_documents/sellyoursaas/git, so we copy it locally into /tmp/... 
+					# Archive file available into the NFS remote directory /home/admin/wwwroot/dolibarr_documents/sellyoursaas/git, so we copy it locally into /tmp/...
 					echo "cp $dirwithsources2.tar.zst  /tmp/cache$dirwithsources2.tar.zst"
 					cp $dirwithsources2.tar.zst  /tmp/cache$dirwithsources2.tar.zst
 				else
@@ -841,9 +858,9 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 						echo "tar c -I gzip --exclude-vcs --exclude-from=$scriptdir/git_update_sources.exclude -f /tmp/cache$dirwithsources2.tgz ."
 						#cp -r $dirwithsources2/. $targetdirwithsources2
 						tar c -I gzip --exclude-vcs --exclude-from=$scriptdir/git_update_sources.exclude -f /tmp/cache$dirwithsources2.tgz .
-					fi			
+					fi
 				fi
-			fi 
+			fi
 
 			if [[ -f /tmp/cache$dirwithsources2.tar.zst ]]; then
 				echo `date +'%Y-%m-%d %H:%M:%S'`" Local zst cache found for src 2. We use it with: tar -I zstd -xf /tmp/cache$dirwithsources2.tar.zst --directory $targetdirwithsources2/"
@@ -865,29 +882,29 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 	if [ -d $dirwithsources3 ]; then
 		if [[ "x$targetdirwithsources3" != "x" ]]; then
 			mkdir -p $targetdirwithsources3
-			
+
 			# Check local cache
-			
+
 			if [ -f "$dirwithsources3.tar.zst" ]; then
 				datesource=`date -r $dirwithsources3.tar.zst +"%Y%m%d"`
 			else
 				datesource=0
 			fi
-			
+
 			if [ -f "/tmp/cache$dirwithsources3.tar.zst" ]; then
 				datecache=`date -r /tmp/cache$dirwithsources3.tar.zst +"%Y%m%d"`
 			else
 				if [ -f "/tmp/cache$dirwithsources3.tgz" ]; then
 					datecache=`date -r /tmp/cache$dirwithsources3.tgz +"%Y%m%d"`
-				else 
+				else
 					datecache=0
 				fi
 			fi
-			
+
 			datecachets=$(date -d "${datecache}" +%s)
 			now=$(date +%s)
 			datecacheage=$(( (now - datecachets) / 86400 ))
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" datesource (archive on NFS dir)=$datesource - datecache (archive on local dir)=$datecache - age of datecache=$datecacheage"
 
 			if [ $datecache -eq 0 -o $datesource -gt $datecache -o "$datecacheage" -gt 7 ]; then
@@ -896,7 +913,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 				#echo "cp -r $dirwithsources3/. /tmp/cache$dirwithsources3"
 
 				if [[ -f $dirwithsources3.tar.zst ]]; then
-					# Archive file available into the NFS remote directory /home/admin/wwwroot/dolibarr_documents/sellyoursaas/git, so we copy it locally into /tmp/... 
+					# Archive file available into the NFS remote directory /home/admin/wwwroot/dolibarr_documents/sellyoursaas/git, so we copy it locally into /tmp/...
 					echo "cp $dirwithsources3.tar.zst  /tmp/cache$dirwithsources3.tar.zst"
 					cp $dirwithsources3.tar.zst  /tmp/cache$dirwithsources3.tar.zst
 				else
@@ -908,9 +925,9 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 						echo "tar c -I gzip --exclude-vcs --exclude-from=$scriptdir/git_update_sources.exclude -f /tmp/cache$dirwithsources3.tgz ."
 						#cp -r $dirwithsources3/. $targetdirwithsources3
 						tar c -I gzip --exclude-vcs --exclude-from=$scriptdir/git_update_sources.exclude -f /tmp/cache$dirwithsources3.tgz .
-					fi			
+					fi
 				fi
-			fi 
+			fi
 
 			if [[ -f /tmp/cache$dirwithsources3.tar.zst ]]; then
 				echo `date +'%Y-%m-%d %H:%M:%S'`" Local zst cache found for src 3. We use it with: tar -I zstd -xf /tmp/cache$dirwithsources3.tar.zst --directory $targetdirwithsources3/"
@@ -937,6 +954,58 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 	chmod -R go-rwxs $targetdir/$osusername/$dbname
 fi
 
+# Undeploy option files
+if [[ "$mode" == "undeployoption" ]]; then
+	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Undeploy option files"
+
+	echo `date +'%Y-%m-%d %H:%M:%S'`" Uninstall targetdirwithsources1=$targetdirwithsources1"
+	if [[ "x$targetdirwithsources1" != "x" ]]; then
+		dirtargetdirwithsources1=$(dirname $targetdirwithsources1)
+		nametargetdirwithsources1=$(basename $dirtargetdirwithsources1)
+		if [[ $nametargetdirwithsources1 == "custom" ]];
+		then
+			echo rm -r $targetdirwithsources1 2>/dev/null
+			if [[ $testorconfirm == "confirm" ]]
+			then
+				rm -r $targetdirwithsources1 2>/dev/null
+			fi
+		else
+			echo `date +'%Y-%m-%d %H:%M:%S'`" Target $targetdirwithsources1 isn't in custom directory so we do not delete"
+		fi
+	fi
+
+	echo `date +'%Y-%m-%d %H:%M:%S'`" Uninstall targetdirwithsources2=$targetdirwithsources2"
+	if [[ "x$targetdirwithsources2" != "x" ]]; then
+		dirtargetdirwithsources2=$(dirname $targetdirwithsources2)
+		nametargetdirwithsources2=$(basename $dirtargetdirwithsources2)
+		if [[ $nametargetdirwithsources2 == "custom" ]];
+		then
+			echo rm -r $targetdirwithsources2 2>/dev/null
+			if [[ $testorconfirm == "confirm" ]]
+			then
+				rm -r $targetdirwithsources2 2>/dev/null
+			fi
+		else
+			echo `date +'%Y-%m-%d %H:%M:%S'`" Target $targetdirwithsources2 isn't in custom directory so we do not delete"
+		fi
+	fi
+
+	echo `date +'%Y-%m-%d %H:%M:%S'`" Uninstall targetdirwithsources3=$targetdirwithsources3"
+	if [[ "x$targetdirwithsources3" != "x" ]]; then
+		dirtargetdirwithsources3=$(dirname $targetdirwithsources3)
+		nametargetdirwithsources3=$(basename $dirtargetdirwithsources3)
+		if [[ $nametargetdirwithsources3 == "custom" ]];
+		then
+			echo rm -r $targetdirwithsources3 2>/dev/null
+			if [[ $testorconfirm == "confirm" ]]
+			then
+				rm -r $targetdirwithsources3 2>/dev/null
+			fi
+		else
+			echo `date +'%Y-%m-%d %H:%M:%S'`" Target $targetdirwithsources3 isn't in custom directory so we do not delete"
+		fi
+	fi
+fi
 
 # Undeploy config file
 
@@ -954,7 +1023,7 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 		fi
 	else
 		echo File $targetfileforconfig1 was already removed/archived
-	fi		
+	fi
 fi
 
 
@@ -963,7 +1032,7 @@ fi
 if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Undeploy files that are into $targetdir/$osusername/$dbname ispaidinstance = $ispaidinstance archivedir = $archivedir"
-			
+
 	# If the dir where instance was deployed still exists, we move it manually
 	if [ -d $targetdir/$osusername/$dbname ]; then
 		echo The dir $targetdir/$osusername/$dbname still exists, we archive it
@@ -971,7 +1040,7 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 			echo The target archive directory $archivedir/$osusername/$dbname already exists, so we overwrite files into existing archive
 			echo cp -pr $targetdir/$osusername/$dbname $archivedir/$osusername
 			cp -pr $targetdir/$osusername/$dbname $archivedir/$osusername
-			
+
 			if [[ $testorconfirm == "confirm" ]]
 			then
 				rm -fr $targetdir/$osusername/$dbname
@@ -982,8 +1051,8 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 			then
 				mkdir $archivedir/$osusername
 				mkdir $archivedir/$osusername/$dbname
-				
-				
+
+
 				if [[ "x$ispaidinstance" == "x1" ]]; then
 					if [[ "x$archivepaidinstances" == "x0" ]]; then
 						if [[ -x /usr/bin/zstd && "x$usecompressformatforarchive" == "xzstd" ]]; then
@@ -991,7 +1060,7 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 						else
 							echo "Archive of test instances are disabled. We discard the tar cz --exclude-vcs -f $archivedir/$osusername/$osusername.tar.gz $targetdir/$osusername/$dbname"
 						fi
-					else 
+					else
 						if [[ -x /usr/bin/zstd && "x$usecompressformatforarchive" == "xzstd" ]]; then
 							echo tar c -I zstd --exclude-vcs -f $archivedir/$osusername/$osusername.tar.zst $targetdir/$osusername/$dbname
 							tar c -I zstd --exclude-vcs -f $archivedir/$osusername/$osusername.tar.zst $targetdir/$osusername/$dbname
@@ -1039,15 +1108,15 @@ fi
 # Deploy config file
 
 if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
-	
+
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Deploy config file"
-	
+
 	if [[ $targetfileforconfig1 == "-" ]]
 	then
 		echo No config file to deploy for this service
 	else
 		mkdir -p `dirname $targetfileforconfig1`
-		
+
 		if [[ -s $targetfileforconfig1 ]]; then
 			cat $targetfileforconfig1 | grep "$dbname" 2>&1
 			notfound=$?
@@ -1089,7 +1158,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 
 	export apacheconf="/etc/apache2/sellyoursaas-available/$fqn.conf"
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create apache conf $apacheconf from $vhostfile"
-	
+
 	if [[ -s $apacheconf ]]
 	then
 		echo "Apache conf $apacheconf already exists, we delete it since it may be a file from an old instance with same name"
@@ -1127,7 +1196,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 			  sed -e "s/__osUsername__/$osusername/g" | \
 			  sed -e "s/__osGroupname__/$osusername/g" | \
 			  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 			  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 			  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 			  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -1141,14 +1210,14 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 
 
 	# Enable conf with ln
-	echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.conf /etc/apache2/sellyoursaas-online 
+	echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.conf /etc/apache2/sellyoursaas-online
 	ln -fs /etc/apache2/sellyoursaas-available/$fqn.conf /etc/apache2/sellyoursaas-online
-	
+
 	# Remove and recreate customurl
 	rm -f /etc/apache2/sellyoursaas-available/$fqn.custom.conf
 	rm -f /etc/apache2/sellyoursaas-online/$fqn.custom.conf
 	if [[ "x$customurl" != "x" ]]; then
-	
+
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create apache conf $apacheconf from $vhostfile"
 
 		export pathforcertifmaster="/home/admin/wwwroot/dolibarr_documents/sellyoursaas/crt"
@@ -1166,11 +1235,11 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 		if [[ "x$CERTIFFORCUSTOMDOMAIN" != "x" ]]; then
 			mkdir -p $pathforcertiflocal
 
-			# If a name for a custom CERTIF stored on master was forced, we use this one as SSL certiticate
+			# If a name for a custom CERTIF stored on master was forced, we use this one as SSL certificate
 			export webCustomSSLCertificateCRT=$CERTIFFORCUSTOMDOMAIN.crt
 			export webCustomSSLCertificateKEY=$CERTIFFORCUSTOMDOMAIN.key
 			export webCustomSSLCertificateIntermediate=$CERTIFFORCUSTOMDOMAIN-intermediate.crt
-		
+
 			if [[ ! -e $pathforcertiflocal/$webCustomSSLCertificateCRT ]]; then
 				# If file or link does not exist
 				echo `date +'%Y-%m-%d %H:%M:%S'`" cp -pn $pathforcertifmaster/$webCustomSSLCertificateCRT to $pathforcertiflocal/$webCustomSSLCertificateCRT"
@@ -1204,7 +1273,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 					ln -fs /etc/apache2/$webSSLCertificateIntermediate $pathforcertiflocal/$webCustomSSLCertificateIntermediate
 				fi
 			fi
-			
+
 			echo `date +'%Y-%m-%d %H:%M:%S'`" chown -R admin:www-data $pathforcertiflocal/"
 			chown -R admin:www-data $pathforcertiflocal/
 
@@ -1221,21 +1290,21 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 				echo `date +'%Y-%m-%d %H:%M:%S'`" ln -fs $pathforcertiflocal/$webCustomSSLCertificateIntermediate /etc/apache2/$webCustomSSLCertificateIntermediate"
 				ln -fs $pathforcertiflocal/$webCustomSSLCertificateIntermediate /etc/apache2/$webCustomSSLCertificateIntermediate
 			fi
-		else 
+		else
 			# No $CERTIFFORCUSTOMDOMAIN forced (no cert file was created initially), so we will generate one
 			export domainnameorcustomurl=`echo $customurl | cut -d "." -f 1`
-			
+
 			# TODO We must create it using letsencrypt if not yet created. NOTE: This is done in action "rename" (suspen_unsuspend.sh), not sure we must also do it  on deploy.
 			#if [[ ! -e /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$fqn.crt ]]; then
 					# Generate the letsencrypt certificate
-					
-					# certbot certonly -n -v --webroot -w $instancedir -d $customurl 
-					# create links					
+
+					# certbot certonly -n -v --webroot -w $instancedir -d $customurl
+					# create links
 
 					# If links does not exists, we disable SSL
 					#SSLON="Off"
 			#fi
-			
+
 			if [[ ! -e /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$fqn-custom.crt ]]; then
 				# If custom cert not found, we fallback on the wildcard one for server (it will generate a warning, but it will works and not hangs !)
 				export webCustomSSLCertificateCRT="/etc/apache2/$webSSLCertificateCRT"
@@ -1291,7 +1360,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 				  sed -e "s/__osUsername__/$osusername/g" | \
 				  sed -e "s/__osGroupname__/$osusername/g" | \
 				  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 				  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 				  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 				  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -1305,13 +1374,13 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 				  sed -e "s/with\.sellyoursaas\.com/$CERTIFFORCUSTOMDOMAIN/g" > $apacheconf
 
 
-		echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online 
+		echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
 		ln -fs /etc/apache2/sellyoursaas-available/$fqn.custom.conf /etc/apache2/sellyoursaas-online
 	fi
-	
-	
+
+
 	# Deploy also the php fpm pool file from the scripts/templates/osuxxx.template
-	# A link will also be created into /etc/php/$phpversion/fpm/pool.d/$fqn.conf to this fpm pool file $fqn.conf
+	# A link will also be created into /etc/php/$phpversion/fpm/pool.d/sellyoursaas/$fqn.phpfpm.conf to this fpm pool file $fqn.conf
 	export phpfpmconf="/etc/php/$phpversion/fpm/pool.d/sellyoursaas/$fqn.phpfpm.conf"
 	export phpfpmservicename="sellyoursaas-php$phpversion-fpm-$fqn.service"
 	export phpfpmservice="/etc/systemd/system/$phpfpmservicename"
@@ -1322,7 +1391,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 			echo "Apache conf $phpfpmconf already exists, we delete it since it may be a file from an old instance with same name"
 			rm -f $phpfpmconf
 		fi
-	
+
 		echo "cat $fpmpoolfiletemplate | sed -e 's/__webAppDomain__/$instancename.$domainname/g' | \
 				  sed -e 's/__webAppAliases__/$instancename.$domainname/g' | \
 				  sed -e 's/__webAppLogName__/$instancename/g' | \
@@ -1354,7 +1423,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 				  sed -e "s/__osUsername__/$osusername/g" | \
 				  sed -e "s/__osGroupname__/$osusername/g" | \
 				  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 				  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 				  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 				  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -1404,7 +1473,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 				  sed -e "s/__osUsername__/$osusername/g" | \
 				  sed -e "s/__osGroupname__/$osusername/g" | \
 				  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+				  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 				  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 				  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 				  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
@@ -1440,7 +1509,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 		echo "Failed to deployall instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO
 		exit 19
 	fi
-	
+
 	if [[ "x$apachereload" != "xnoapachereload" ]]; then
 		echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Apache tasks finished. We can launch service apache2 reload."
 		service apache2 reload
@@ -1463,7 +1532,7 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Remove apache conf $apacheconf"
 
 	if [ -f $apacheconf ]; then
-	
+
 		echo Disable conf with a2dissite $fqn.conf
 		#a2dissite $fqn.conf
 		rm /etc/apache2/sellyoursaas-online/$fqn.conf
@@ -1483,7 +1552,7 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 
 		/usr/sbin/apache2ctl configtest
 		if [[ "x$?" != "x0" ]]; then
-			echo Error when running apache2ctl configtest 
+			echo Error when running apache2ctl configtest
 			echo "Failed to undeploy or undeployall instance $instancename.$domainname with: Error when running apache2ctl configtest" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in undeployment" $EMAILTO
 			exit 21
 		fi
@@ -1513,7 +1582,7 @@ fi
 if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Install cron file $cronfile"
-	
+
 	if [[ -s $cronfile ]]
 	then
 		if [[ -f /var/spool/cron/crontabs/$osusername ]]; then
@@ -1536,7 +1605,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 			echo cp $cronfile /var/spool/cron/crontabs/$osusername
 			cp $cronfile /var/spool/cron/crontabs/$osusername
 		fi
-	
+
 		chown $osusername:$osusername /var/spool/cron/crontabs/$osusername
 		chmod 600 /var/spool/cron/crontabs/$osusername
 	else
@@ -1558,12 +1627,12 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 		rm -f /var/spool/cron/crontabs/$osusername
 	else
 		echo cron file /var/spool/cron/crontabs/$osusername already removed or empty
-	fi 
+	fi
 fi
 if [[ "$mode" == "undeployall" ]]; then
 
 	echo rm -f /var/spool/cron/crontabs.disabled/$osusername
-	rm -f /var/spool/cron/crontabs.disabled/$osusername 
+	rm -f /var/spool/cron/crontabs.disabled/$osusername
 
 fi
 
@@ -1573,32 +1642,32 @@ fi
 if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create database $dbname for user $dbusername"
-	
+
 	Q1="CREATE DATABASE IF NOT EXISTS $dbname; "
 	#Q2="CREATE USER IF NOT EXISTS '$dbusername'@'localhost' IDENTIFIED BY '$dbpassword'; "
 	Q2="CREATE USER '$dbusername'@'localhost' IDENTIFIED BY '$dbpassword'; "
 	SQL="${Q1}${Q2}"
 	echo "$MYSQL -A -h $dbserverhost -P $dbserverport -u$dbadminuser -pXXXXXX -e \"$SQL\""
 	$MYSQL -A -h $dbserverhost -P $dbserverport -u$dbadminuser -p$dbadminpass -e "$SQL"
-	
+
 	Q1="CREATE DATABASE IF NOT EXISTS $dbname; "
 	#Q2="CREATE USER IF NOT EXISTS '$dbusername'@'%' IDENTIFIED BY '$dbpassword'; "
 	Q2="CREATE USER '$dbusername'@'%' IDENTIFIED BY '$dbpassword'; "
 	SQL="${Q1}${Q2}"
 	echo "$MYSQL -A -h $dbserverhost -P $dbserverport -u$dbadminuser -pXXXXXX -e \"$SQL\""
 	$MYSQL -A -h $dbserverhost -P $dbserverport -u$dbadminuser -p$dbadminpass -e "$SQL"
-	
+
 	# For mariadb by default
 	Q1="GRANT CREATE,CREATE TEMPORARY TABLES,CREATE VIEW,DROP,DELETE,INSERT,SELECT,UPDATE,ALTER,INDEX,LOCK TABLES,REFERENCES,SHOW VIEW ON $dbname.* TO '$dbusername'@'localhost'; "
 	Q2="GRANT CREATE,CREATE TEMPORARY TABLES,CREATE VIEW,DROP,DELETE,INSERT,SELECT,UPDATE,ALTER,INDEX,LOCK TABLES,REFERENCES,SHOW VIEW ON $dbname.* TO '$dbusername'@'%'; "
 	Q2a=""
 	Q2b=""
-	
+
 	# Replaced with SET PASSWORD done later. Obsolete since MariaDB 10.4
 	#Q3="UPDATE mysql.user SET Password=PASSWORD('$dbpassword') WHERE User='$dbusername'; "
 	#Q3a=""
 	#Q3b=""
-	
+
 	# If we use mysql and not mariadb, we set password differently
 	dpkg -l | grep mariadb > /dev/null
 	if [[ $? == "1" || $dbforcesetpassword == "1" ]]; then
@@ -1611,18 +1680,18 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 		#Q3a="SET PASSWORD FOR '$dbusername'@'localhost' = PASSWORD('$dbpassword'); "
 		#Q3b="SET PASSWORD FOR '$dbusername'@'%' = PASSWORD('$dbpassword'); "
 	fi
-	
+
 	# For all mysql and mariadb
 	Q3="SET PASSWORD FOR '$dbusername' = PASSWORD('$dbpassword'); "
 	Q3a="SET PASSWORD FOR '$dbusername'@'localhost' = PASSWORD('$dbpassword'); "
 	Q3b="SET PASSWORD FOR '$dbusername'@'%' = PASSWORD('$dbpassword'); "
-	
+
 	Q4="FLUSH PRIVILEGES; "
 	SQL="${Q1}${Q2}${Q2a}${Q2b}${Q3}${Q3a}${Q3b}${Q4}"
 	echo "$MYSQL -A -h $dbserverhost -P $dbserverport -u$dbadminuser -pXXXXXX -e \"$SQL\""
 	$MYSQL -A -h $dbserverhost -P $dbserverport -u$dbadminuser -p$dbadminpass -e "$SQL"
 
-	echo "You can test with mysql $dbname -h $dbserverhost -P $dbserverport -u $dbusername -p$dbpassword"
+	echo "You can test with mysql $dbname -h $dbserverhost -P $dbserverport -u $dbusername -pXXXXXX"
 
 	# Load dump file
 	echo `date +'%Y-%m-%d %H:%M:%S'`" Search dumpfile into $dirwithdumpfile"
@@ -1633,7 +1702,7 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" ]]; then
 		listoffiles=`ls -A -t $dirwithdumpfile/*.sql 2>/dev/null`
 		echo `date +'%Y-%m-%d %H:%M:%S'`" list of sql files found by a ls: $listoffiles"
 	fi
-	
+
 	for dumpfile in $listoffiles
 	do
 		echo "$MYSQL -A -h $dbserverhost -P $dbserverport -u$dbadminuser -pXXXXXX -D $dbname < $dumpfile"
@@ -1676,7 +1745,7 @@ if [[ "$mode" == "undeploy" || "$mode" == "undeployall" ]]; then
 			echo "DROP USER '$dbusername'@'localhost';" | $MYSQL -h $dbserverhost -P $dbserverport -u$dbadminuser -p$dbadminpass
 		fi
 	else
-		echo "ERROR in dumping database, so we don't try to drop it"	
+		echo "ERROR in dumping database, so we don't try to drop it"
 	fi
 fi
 
@@ -1684,12 +1753,12 @@ fi
 # Delete os directory and user + group
 
 if [[ "$mode" == "undeployall" ]]; then
-	
+
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Delete user $osusername with home into $targetdir/$osusername and archive it into $archivedir"
 
 	echo crontab -r -u $osusername
 	crontab -r -u $osusername
-	
+
 	# Note: When we do this the home dir of $osusername was already archived by code few lines previously
 	echo deluser --remove-home --backup --backup-to $archivedir/$osusername $osusername
 	if [[ $testorconfirm == "confirm" ]]
@@ -1697,7 +1766,7 @@ if [[ "$mode" == "undeployall" ]]; then
 		deluser --remove-home --backup --backup-to $archivedir/$osusername $osusername
 		chmod -R ug+r $archivedir/$osusername/*.bz2
 	fi
-	
+
 	echo deluser --group $osusername
 	if [[ $testorconfirm == "confirm" ]]
 	then
@@ -1715,9 +1784,25 @@ if [[ "$mode" == "deploy" || "$mode" == "deployall" || "$mode" == "deployoption"
 			echo `date +'%Y-%m-%d %H:%M:%S'`" Execute script with . $cliafter"
 			. $cliafter
 			if [[ "x$?" != "x0" ]]; then
-				echo Error when running the CLI script $cliafter 
+				echo Error when running the CLI script $cliafter
 				echo "Error when running the CLI script $cliafter" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO
 				exit 26
+			fi
+		fi
+	fi
+fi
+
+# Execute after deploy option
+
+if [[ "$mode" == "deployoption" ]]; then
+	if [[ "x$cliafterdeployoption" != "x" ]]; then
+		if [ -f $cliafterdeployoption ]; then
+			echo `date +'%Y-%m-%d %H:%M:%S'`" Execute script with . $cliafterdeployoption"
+			. $cliafterdeployoption
+			if [[ "x$?" != "x0" ]]; then
+				echo Error when running the CLI script $cliafterdeployoption
+				echo "Error when running the CLI script $cliafterdeployoption" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in deployment" $EMAILTO
+				exit 27
 			fi
 		fi
 	fi
@@ -1739,7 +1824,7 @@ fi
 #fi
 
 echo `date +'%Y-%m-%d %H:%M:%S'`" Process of action $mode of $instancename.$domainname for user $osusername finished with no error"
-echo `date +'%Y-%m-%d %H:%M:%S'`" return 0" 
+echo `date +'%Y-%m-%d %H:%M:%S'`" return 0"
 echo
 
 exit 0

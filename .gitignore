@@ -1,6 +1,14 @@
+*.swp
+.cache
 .buildpath
 .project
 .settings/
 .idea
 .vscode
 /.asciidoctorconfig.adoc
+/ansible-py38/
+/.vibe
+/.vibeignore
+/.claudeignore
+/.claude
+/CLAUDE.md

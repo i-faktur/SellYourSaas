@@ -1,0 +1,748 @@
+#!/usr/bin/php
+<?php
+/* Copyright (C) 2020-2021 Laurent Destailleur	<eldy@users.sourceforge.net>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * or see http://www.gnu.org/
+ *
+ * Migrate an old instance on a new server.
+ * Script must be ran with admin from deployment server.
+ */
+
+/**
+ *      \file       sellyoursaas/scripts/deployment_deploy_module.php
+ *		\ingroup    sellyoursaas
+ *      \brief      Script to run from the deployment server to deploy module on several instances.
+ */
+
+if (!defined('NOSESSION')) {
+	define('NOSESSION', '1');
+}
+if (!defined('NOREQUIREDB')) {
+	define('NOREQUIREDB', '1');
+}				// Do not create database handler $db
+if (!defined('NOREQUIREVIRTUALURL')) {
+	define('NOREQUIREVIRTUALURL', '1');
+}
+
+
+$sapi_type = php_sapi_name();
+$script_file = basename(__FILE__);
+$path=dirname(__FILE__).'/';
+
+// Test if batch mode
+if (substr($sapi_type, 0, 3) == 'cgi') {
+	echo "Error: You are using PHP for CGI. To execute ".$script_file." from command line, you must use PHP for CLI mode.\n";
+	exit(-1);
+}
+
+$version='1.0';
+$nbdeployok = 0;
+$nbdeployko = 0;
+$nbdeploynothingdone = 0;
+
+// Include Dolibarr environment
+@set_time_limit(0);							// No timeout for this script
+define('EVEN_IF_ONLY_LOGIN_ALLOWED', 1);		// Set this define to 0 if you want to lock your script when dolibarr setup is "locked to admin user only".
+
+// Read /etc/sellyoursaas.conf file
+$masterserver='';
+$instanceserver='';
+$databasehost='localhost';
+$databaseport='3306';
+$database='';
+$databaseuser='sellyoursaas';
+$databasepass='';
+$dolibarrdir='';
+$usecompressformatforarchive='gzip';
+$subdomain='';
+
+$fp = @fopen('/etc/sellyoursaas.conf', 'r');
+// Add each line to an array
+if ($fp) {
+	$array = explode("\n", fread($fp, filesize('/etc/sellyoursaas.conf')));
+	foreach ($array as $val) {
+		$tmpline=explode("=", $val);
+		if ($tmpline[0] == 'instanceserver') {
+			$instanceserver = $tmpline[1];
+		}
+		if ($tmpline[0] == 'databasehost') {
+			$databasehost = $tmpline[1];
+		}
+		if ($tmpline[0] == 'databaseport') {
+			$databaseport = $tmpline[1];
+		}
+		if ($tmpline[0] == 'database') {
+			$database = $tmpline[1];
+		}
+		if ($tmpline[0] == 'databaseuser') {
+			$databaseuser = $tmpline[1];
+		}
+		if ($tmpline[0] == 'databasepass') {
+			$databasepass = $tmpline[1];
+		}
+		if ($tmpline[0] == 'dolibarrdir') {
+			$dolibarrdir = $tmpline[1];
+		}
+		if ($tmpline[0] == 'usecompressformatforarchive') {
+			$usecompressformatforarchive = $tmpline[1];
+		}
+		if ($tmpline[0] == 'subdomain') {
+			$subdomain = $tmpline[1];
+		}
+	}
+} else {
+	print "Failed to open /etc/sellyoursaas.conf file\n";
+	if (0 != posix_getuid()) {
+		echo "Script must be ran with root user. Try to switch user.\n";
+	}
+	print "\n";
+	exit(-1);
+}
+
+if (empty($dolibarrdir)) {
+	print "Failed to find 'dolibarrdir' entry into /etc/sellyoursaas.conf file\n";
+	exit(-1);
+}
+if (empty($instanceserver)) {
+	print "Failed to find 'instanceserver' entry into /etc/sellyoursaas.conf file. This script must be run on deployment server.\n";
+	print "\n";
+	exit(-1);
+}
+
+// Load Dolibarr environment
+$res=0;
+// Try master.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
+$tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
+while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
+	$i--;
+	$j--;
+}
+if (! $res && $i > 0 && file_exists(substr($tmp, 0, ($i+1))."/master.inc.php")) {
+	$res=@include substr($tmp, 0, ($i+1))."/master.inc.php";
+}
+if (! $res && $i > 0 && file_exists(dirname(substr($tmp, 0, ($i+1)))."/master.inc.php")) {
+	$res=@include dirname(substr($tmp, 0, ($i+1)))."/master.inc.php";
+}
+// Try master.inc.php using relative path
+if (! $res && file_exists("../master.inc.php")) {
+	$res=@include "../master.inc.php";
+}
+if (! $res && file_exists("../../master.inc.php")) {
+	$res=@include "../../master.inc.php";
+}
+if (! $res && file_exists("../../../master.inc.php")) {
+	$res=@include "../../../master.inc.php";
+}
+if (! $res && file_exists("../../../../master.inc.php")) {
+	$res=@include "../../../../master.inc.php";
+}
+if (! $res && file_exists(__DIR__."/../../master.inc.php")) {
+	$res=@include __DIR__."/../../master.inc.php";
+}
+if (! $res && file_exists(__DIR__."/../../../master.inc.php")) {
+	$res=@include __DIR__."/../../../master.inc.php";
+}
+if (! $res && file_exists($dolibarrdir."/htdocs/master.inc.php")) {
+	$res=@include $dolibarrdir."/htdocs/master.inc.php";
+}
+if (! $res) {
+	print("Include of master fails\n");
+	exit(-1);
+}
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var User $user
+ *
+ * @var string $dolibarr_main_restrict_os_commands
+ */
+
+$nocache ='';
+$mode=isset($argv[1]) ? $argv[1] : 'test';
+$productref=isset($argv[2]) ? $argv[2] : '';
+$instancefilter = isset($argv[3]) ? $argv[3] : '';
+$allowdeployforfree = isset($argv[4]) ? $argv[4] : 'onlypaid';
+$decryptkey = isset($argv[5]) ? $argv[5] : '';
+if (isset($argv[6])) {
+	$tmp = $argv[6];
+	if (strlen($tmp) == 2) {
+		$countrycode = $tmp;
+	}
+	if ($tmp == 'nocache') {
+		$nocache = 'nocache';
+	}
+}
+if (isset($argv[7])) {
+	$tmp = $argv[7];
+	if (strlen($tmp) == 2) {
+		$countrycode = $tmp;
+	}
+	if ($tmp == 'nocache') {
+		$nocache = 'nocache';
+	}
+}
+
+dol_include_once("sellyoursaas/core/lib/sellyoursaas.lib.php");
+dol_include_once("sellyoursaas/class/sellyoursaascontract.class.php");
+dol_include_once("sellyoursaas/class/sellyoursaasutils.class.php");
+dol_include_once('sellyoursaas/class/packages.class.php');
+include_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
+require_once DOL_DOCUMENT_ROOT."/core/class/utils.class.php";
+require_once DOL_DOCUMENT_ROOT."/core/lib/company.lib.php";
+
+$dolibarr_main_restrict_os_commands = ($dolibarr_main_restrict_os_commands ? $dolibarr_main_restrict_os_commands.', cd, cp, chown, tar' : '');
+
+print "***** ".$script_file." ".$version." *****\n";
+
+if (0 != posix_getuid()) {
+	echo "Script must be ran with root user. Try to switch user.\n";
+	print "\n";
+	exit(-1);
+}
+
+if (empty($productref)) {
+	print "Deploy a specific module for all deployed instances.\n";
+	print "Script must be ran from each deployment server with login root.\n";
+	print "onlypaid|alsotrial param is used to deploy on trial instances or not (default onlypaid).\n";
+	print "\n";
+	print "Usage:   ".$script_file." test|confirm productref instancefilter onlypaid|alsotrial masteruniquekey [countrycode] [nocache]\n";
+	print "Example: ".$script_file." test TESTMODULE 'aa*' onlypaid abc123456789 FR\n";
+	print "Return code: 0 if success, <> 0 if error\n";
+	print "\n";
+	exit(-1);
+}
+
+$dbmaster = getDoliDBInstance('mysqli', $databasehost, $databaseuser, $databasepass, $database, $databaseport);
+if ($dbmaster) {
+	$conf->setValues($dbmaster);
+}
+// To be able to decrypt encrypted value in master we set the symmetric key
+$conf->file->instance_unique_id = $decryptkey;
+
+$db = $dbmaster;
+$mysoc = new Societe($db);
+$mysoc->setMysoc($conf);
+
+// Try to find module to deploy
+$product = new Product($db);
+$res = $product->fetch('', $productref);
+if ($res <= 0) {
+	print "Can't find service ".$productref." for action ".$mode.".\n";
+	exit(-1);
+}
+if ($product->array_options["options_app_or_option"] != "option") {
+	print "Product isn't an optional module.\n";
+	exit(-1);
+}
+
+$packageid = $product->array_options["options_package"];
+$package = new Packages($db);
+$res = $package->fetch($packageid);
+if ($res <= 0) {
+	print "Product package not found with action ".$mode.".\n";
+	exit(-1);
+}
+
+$utils = new Utils($db);
+
+$instancefiltercomplete = $instancefilter;
+if (empty($instancefilter)) {
+	$instancefiltercomplete = "*";
+}
+if (!strpos($instancefiltercomplete, ".".$subdomain)) {
+	$instancefiltercomplete .= ".".$subdomain;
+}
+
+include_once DOL_DOCUMENT_ROOT.'/contrat/class/contrat.class.php';
+$object=new Contrat($db);
+
+print "Search instances with status done and name matching ".$instancefiltercomplete;
+print ", country code = ".$countrycode.", nocache = ".$nocache;
+print "\n";
+$sql = "SELECT c.rowid as id, c.ref, c.ref_customer as instance,";
+$sql.= " ce.deployment_status as instance_status, ce.latestbackup_date_ok, ce.backup_frequency";
+$sql.= " FROM ".MAIN_DB_PREFIX."contrat as c LEFT JOIN ".MAIN_DB_PREFIX."contrat_extrafields as ce ON c.rowid = ce.fk_object";
+$sql.= " LEFT JOIN ".MAIN_DB_PREFIX."societe as s ON s.rowid = c.fk_soc";
+$sql.= " WHERE c.ref_customer <> '' AND c.ref_customer IS NOT NULL";
+$sql.= " AND c.ref_customer LIKE '".str_replace('*', '%', $instancefiltercomplete)."'";	// $instancefiltercomplete can contains % chars.
+$sql.= " AND ce.deployment_status = 'done'";		// Get 'deployed' only, but only if we don't request a specific instance
+//$sql.= " AND ce.deployment_status IS NOT NULL";
+if (!empty($countrycode)) {
+	$countryid = getCountry($countrycode, "3", $db);
+	if ($countryid == "NotDefined") {
+		print "No country found with code ".$countrycode.".\n";
+		exit(-1);
+	}
+	$sql.= " AND s.fk_pays = ".$countryid;
+}
+$sql.= " AND (ce.suspendmaintenance_message IS NULL OR ce.suspendmaintenance_message NOT LIKE 'http%')";	// Exclude instance of type redirect
+$sql.= " ORDER BY instance ASC";
+
+dol_syslog($script_file, LOG_DEBUG);
+
+$resql=$db->query($sql);
+if ($resql) {
+	$num = $db->num_rows($resql);
+	$i = 0;
+	if ($num) {
+		// Loop on each deployed instance/contract
+		while ($i < $num) {
+			$db->begin();
+			$error=0;
+			$obj = $db->fetch_object($resql);
+			if ($obj) {
+				$instance = $obj->instance;
+
+				print("\n-- Deploying module ".$productref." for instance ".$instance."\n");
+
+				$contractid = $obj->id;
+
+				unset($object->linkedObjects);
+				unset($object->linkedObjectsIds);
+				$result = $object->fetch($contractid);
+				if ($result <= 0) {
+					$i++;
+					$nbdeployko++;
+					dol_print_error($db, $object->error, $object->errors);
+					continue;
+				}
+				// Set $payment_status ('TRIAL'or 'PAID')
+				$payment_status='PAID';
+				$ispaid = sellyoursaasIsPaidInstance($object);	// This load linkedObjectsIds
+				if (! $ispaid) {
+					$payment_status='TRIAL';
+				}
+				if ($payment_status == "TRIAL" && $allowdeployforfree != "alsotrial") {
+					print("Instance ".$instance." is in free mode so we do nothing\n");
+					$nbdeploynothingdone++;
+					continue;
+				}
+
+				$contractlines = $object->getLinesArray();
+				$productlinefound = false;
+				$date_end = dol_now();
+				foreach ($contractlines as $tmpline) {
+					if ($tmpline->fk_product == $product->id) {
+						$productlinefound =true;
+					}
+					$date_end = $tmpline->date_end;
+				}
+				if ($productlinefound) {
+					$nbdeploynothingdone++;
+					print("Warning: Module ".$product->ref." already present in contract for instance ".$instance."\n");
+				} else {
+					// Create service line(s) in contract
+					$date_start = dol_now();
+					if ($date_end < $date_start) {
+						$date_end = $date_start;
+					}
+					$idlinecontract = $object->addline($product->description, $product->price, 1, $product->tva_tx, $product->localtax1_tx, $product->localtax2_tx, $product->id, 0, $date_start, $date_end);
+					if ($idlinecontract <= 0) {
+						dol_print_error($db, $object->error, $object->errors);
+						$error++;
+					}
+
+					// Activate service line(s) in contract
+					if (!$error) {
+						$object->fetch($contractid);
+						$result = $object->active_line($user, $idlinecontract, $date_start, '', 'Activation after option deployment');
+						if (!$result) {
+							dol_print_error($db, $object->error, $object->errors);
+							$error ++;
+						}
+					}
+
+					// create service line in recurring invoice
+					if (!$error) {
+						$object->fetchObjectLinked();
+						if (!empty($object->linkedObjects["facturerec"])) {
+							$arrayfacturerec = array_values($object->linkedObjects["facturerec"]);
+
+							if (count($arrayfacturerec) != 1) {
+								print("Error: Too many recurring invoices were found for instance ".$instance."\n");
+								$error ++;
+							} else {
+								$facturerec = $arrayfacturerec[0];
+								$result = $facturerec->addLine($product->description, $product->price, 1, $product->tva_tx, $product->localtax1_tx, $product->localtax2_tx, $product->id, 0, 'HT', 0, '', 0, 0, -1, 0, '', null, 0, 1, 1);
+								if (!$result) {
+									dol_print_error($db, $facturerec->error, $facturerec->errors);
+									$error ++;
+								}
+							}
+						}
+					}
+				}
+
+				// Deploy files and launch scripts
+				if (!$error) {
+					if (empty($object->thirdparty)) {
+						$object->fetch_thirdparty();
+					}
+					$tmppackage = $package;
+					$now = dol_now();
+					$orgname = $object->thirdparty->name;
+					$countryid = 0;
+					$countrycode = '';
+					$countrylabel = '';
+					$countryidcodelabel = '';
+					if ($object->thirdparty->country_id > 0 && $object->thirdparty->country_code && $object->thirdparty->country) {
+						$countryidcodelabel=$object->thirdparty->country_id.':'.$object->thirdparty->country_code.':'.$object->thirdparty->country;
+					}
+
+					$targetdir            = getDolGlobalString('DOLICLOUD_INSTANCES_PATH');
+					$archivedir           = getDolGlobalString('SELLYOURSAAS_TEST_ARCHIVES_PATH');
+
+					$type_db = $conf->db->type;
+					$hostname_db  = $object->array_options['options_hostname_db'];
+					$username_db  = $object->array_options['options_username_db'];
+					$password_db  = $object->array_options['options_password_db'];
+					$database_db  = $object->array_options['options_database_db'];
+					$port_db      = (!empty($object->array_options['options_port_db']) ? $object->array_options['options_port_db'] : 3306);
+					$prefix_db    = (!empty($object->array_options['options_prefix_db']) ? $object->array_options['options_prefix_db'] : 'llx_');
+					$hostname_os  = $object->array_options['options_hostname_os'];
+					$username_os  = $object->array_options['options_username_os'];
+					$password_os  = $object->array_options['options_password_os'];
+					$tmp = explode('.', $object->ref_customer, 2);
+					$instance = $tmp[0];
+
+					// Replace __INSTANCEDIR__, __INSTALLHOURS__, __INSTALLMINUTES__, __OSUSERNAME__, __APPUNIQUEKEY__, __APPDOMAIN__, ...
+					$substitarray=array(
+						'__INSTANCEDIR__'=>$targetdir.'/'.$username_os.'/'.$database_db,
+						'__INSTANCEDBPREFIX__'=>$prefix_db,
+						'__DOL_DATA_ROOT__'=> getDolGlobalString('SELLYOURSAAS_FORCE_DOL_DATA_ROOT', DOL_DATA_ROOT),
+						'__INSTALLHOURS__'=>dol_print_date($now, '%H'),
+						'__INSTALLMINUTES__'=>dol_print_date($now, '%M'),
+						'__OSHOSTNAME__'=>$hostname_os,
+						'__OSUSERNAME__'=>$username_os,
+						'__OSPASSWORD__'=>$password_os,
+						'__DBHOSTNAME__'=>$hostname_db,
+						'__DBNAME__'=>$database_db,
+						'__DBPORT__'=>$port_db,
+						'__DBUSER__'=>$username_os,
+						'__DBPASSWORD__'=>$password_os,
+						'__PACKAGEREF__'=> $tmppackage->ref,
+						'__PACKAGENAME__'=> $tmppackage->label,
+						'__APPORGNAME__'=> $orgname,
+						'__APPCOUNTRYID__'=> $countryid,
+						'__APPCOUNTRYCODE__'=> $countrycode,
+						'__APPCOUNTRYLABEL__'=> $countrylabel,
+						'__APPCOUNTRYIDCODELABEL__'=> $countryidcodelabel,
+						'__ALLOWOVERRIDE__'=>$tmppackage->allowoverride,
+						'__SELLYOURSAAS_LOGIN_FOR_SUPPORT__'=>getDolGlobalString('SELLYOURSAAS_LOGIN_FOR_SUPPORT'),
+					);
+
+					$datafile1 = make_substitutions($tmppackage->datafile1, $substitarray);
+					$srcfile1 = make_substitutions($tmppackage->srcfile1, $substitarray);
+					$srcfile2 = make_substitutions($tmppackage->srcfile2, $substitarray);
+					$srcfile3 = make_substitutions($tmppackage->srcfile3, $substitarray);
+					$targetsrcfile1 = make_substitutions($tmppackage->targetsrcfile1, $substitarray);
+					$targetsrcfile2 = make_substitutions($tmppackage->targetsrcfile2, $substitarray);
+					$targetsrcfile3 = make_substitutions($tmppackage->targetsrcfile3, $substitarray);
+					$cliafterdeployoption = make_substitutions($tmppackage->cliafterdeployoption, $substitarray);
+					$cliafterdeployoption = str_replace("\r", '', $cliafterdeployoption);
+
+					print "Deploy files\n";
+
+					$deployarray = array();
+					$deployarray[1] = array("src" => $srcfile1, "dest" => $targetsrcfile1);
+					$deployarray[2] = array("src" => $srcfile2, "dest" => $targetsrcfile2);
+					$deployarray[3] = array("src" => $srcfile3, "dest" => $targetsrcfile3);
+					foreach ($deployarray as $deploy) {
+						if (empty($deploy["src"])) {
+							continue;
+						}
+						if (dol_is_dir($deploy["src"])) {
+							print "Using src = ".$deploy["src"]." dest = ".$deploy["dest"]."\n";
+							$res = dol_mkdir($deploy["dest"]);
+							if ($res < 0) {
+								print "Error: Failed to create ".$deploy["dest"]." directory\n";
+								$error++;
+								break;
+							}
+							$datesource = 0;
+							$datecache = 0;
+
+							// Check cache
+							if (dol_is_file($deploy["src"].".tar.zst")) {
+								$datesource = dol_filemtime($deploy["src"].".tar.zst");
+							}
+							if (dol_is_file("/tmp/cache".$deploy["src"].".tar.zst")) {
+								$datecache = dol_filemtime("/tmp/cache".$deploy["src"].".tar.zst");
+							} else {
+								if (dol_is_file("/tmp/cache".$deploy["src"].".tgz")) {
+									$datecache = dol_filemtime("/tmp/cache".$deploy["src"].".tgz");
+								}
+							}
+							$cacheage = ($now - $datecache) / 86400;
+							$MAXAGE = 2;
+							print "Archive cache age is ".$cacheage." / MAX is ".$MAXAGE.", nocache is ".$nocache."\n";
+
+							if ($datecache == 0 || $datesource > $datecache || $cacheage > $MAXAGE || $nocache) {
+								print "Renew of the archive\n";
+								$res = dol_mkdir("/tmp/cache".$deploy["src"]);
+								if ($res < 0) {
+									$error++;
+									break;
+								}
+								if (dol_is_file($deploy["src"].".tar.zst")) {
+									dol_copy($deploy["src"].".tar.zst", "/tmp/cache".$deploy["src"].".tar.zst");
+								}
+								if (dol_is_file($deploy["src"].".tgz")) {
+									dol_copy($deploy["src"].".tgz", "/tmp/cache".$deploy["src"].".tgz");
+								} else {
+									$cmd = "cd '".$deploy["src"]."'";
+									$cmd .= " && tar c -I gzip --exclude-vcs --exclude-from='".$path."git_update_sources.exclude' -f '/tmp/cache".$deploy['src'].".tgz' .";
+									print $cmd."\n";
+									file_put_contents('/tmp/debug_cmd.txt', $cmd);
+									$result = $utils->executeCli(str_replace("\r", '', $cmd), "", 0, null, 1);
+									if ($result["result"] != 0) {
+										$error++;
+										print $result["error"];
+									}
+									print $result["output"];
+								}
+								$nocache = "";	// We do not want to renew cache for next deploy
+							}
+
+							if (dol_is_file("/tmp/cache".$deploy["src"].".tar.zst")) {
+								$cmd = "tar -I zstd -xf '/tmp/cache".$deploy["src"].".tar.zst' --directory '".$deploy["dest"]."/'";
+							} elseif (dol_is_file("/tmp/cache".$deploy["src"].".tgz")) {
+								$cmd = "tar -xzf '/tmp/cache".$deploy["src"].".tgz' --directory '".$deploy["dest"]."/'";
+							} else {
+								$cmd = "cp -r '".$deploy["src"]."/.' '".$deploy["dest"]."'";
+							}
+							// Execute cmd to deploy module files
+							print $cmd."\n";
+							if ($mode == "confirm") {
+								$result = $utils->executeCli($cmd, "");
+								if ($result["result"] != 0) {
+									$error++;
+									print $result["error"];
+								}
+							} else {
+								print "Ignored. Unpacking files is disabled in test mode\n";
+							}
+
+							// Execute chown to change permissions
+							$cmd = "chown -R ".$username_os.":".$username_os." ".$deploy["dest"];
+							print $cmd."\n";
+							$result = $utils->executeCli($cmd, "");
+							if ($result["result"] != 0) {
+								$error++;
+								print $result["error"];
+							}
+
+							/*if ($mode != "confirm") {
+								dol_delete_dir_recursive($deploy["dest"]);
+							}*/
+						} else {
+							print "Error: Deploy with src = ".$deploy["src"]." failed. Dir nor found.\n";
+						}
+					}
+
+					// Split string on n lines of command to process. The loop on each command.
+					$arrayofcommand = explode("\n", $cliafterdeployoption);
+					foreach ($arrayofcommand as $command) {
+						print $command."\n";
+						if ($mode == "confirm") {
+							$res = $utils->executeCli($command, "", 0, null, 1);
+							if ($res["result"] != 0) {
+								$error++;
+								print $result["error"];
+							}
+						} else {
+							print "Running command from the cli after deploy option script is disabled in test mode\n";
+						}
+					}
+
+					// Add a direct db connection to instance and add SQL to insert constant into llx_const
+					if (preg_match('/^dolcrypt/', $password_db)) {
+						// The password for user database could not be decrypted, so we can't connect to database
+						print "Could not decrypt the database user password, check that you provided the correct parameter masteruniquekey\n";
+						$error++;
+					}
+
+					$ADDEINVOICESETUP = (preg_match('/einvoicing/i', $product->ref) ? 1 : 0);
+					if ($ADDEINVOICESETUP) {
+						$localhostnamedb = 'localhost';
+						$dbinstance = getDoliDBInstance($type_db, $localhostnamedb, $username_db, $password_db, $database_db, $port_db);
+						if ($dbinstance->connected) {
+							include_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+							$arrayofoptiontoforce = array(
+								'EINVOICING_PDP' => 'SUPERPDPViaPartner',	// Set the AP provider
+								'EINVOICING_LIVE' => 1,
+								'EINVOICING_SUPERPDP_VIAPARTNER' => dolibarr_get_const($dbmaster, 'EINVOICING_SUPERPDP_VIAPARTNER_TEMPLATE'),						// Example: 'DoliCloud'
+								'EINVOICING_SUPERPDP_VIAPARTNER_OAUTH_URL' => dolibarr_get_const($dbmaster, 'EINVOICING_SUPERPDP_VIAPARTNER_OAUTH_URL_TEMPLATE'),	// Example: 'https://admin.myserver.com/custom/einvoicing/public/proxy_oauth.php'
+								'EINVOICING_DISABLE_SYNC_DOLI_TO_AP' => '1'
+							);
+
+							$dbinstance->begin();
+
+							$s = dolibarr_get_const($dbinstance, 'EINVOICING_PDP');
+
+							if (empty($s)) {
+								foreach ($arrayofoptiontoforce as $key => $value) {
+									print "Set setup constant ".$key." to ".$value."\n";
+									dolibarr_set_const($dbinstance, $key, $value);
+								}
+							} else {
+								print "A einvoicing provider seems already set for the instance (on entity 1), we do not change setup.\n";
+							}
+
+							// Make SQL requests to run upgrade
+							$sql1 = 'CREATE TABLE llx_einvoicing_extrafields (rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL, element_id integer NOT NULL, element_type varchar(50) NOT NULL, name varchar(64) NOT NULL, value text, date_creation datetime NOT NULL, tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, fk_user_creat integer NOT NULL, fk_user_modif integer) ENGINE = innodb;';
+							print "Run sql1 ".$sql1."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql1);
+							}
+							$sql2 = 'ALTER TABLE llx_einvoicing_extrafields ADD UNIQUE INDEX uk_einvoicing_extrafields (element_type, element_id, name);';
+							print "Run sql2 ".$sql2."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql2);
+							}
+							$sql3 = 'UPDATE llx_extrafields SET printable = 2 WHERE printable = 1 AND elementtype IN (\'facture\', \'commande\') AND name IN (\'d4d_service_code\', \'d4d_contract_number\', \'d4d_promise_code\')';
+							print "Run sql3 ".$sql3."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql3);
+							}
+							$sql4 = 'ALTER TABLE llx_einvoicing_call ADD COLUMN call_id_num integer AFTER call_id;';
+							print "Run sql4 ".$sql4."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql4);
+							}
+							$sql5 = 'ALTER TABLE llx_einvoicing_call ADD COLUMN request_id varchar(36) AFTER endpoint;';
+							print "Run sql5 ".$sql5."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql5);
+							}
+							$sql6 = 'ALTER TABLE llx_einvoicing_document ADD COLUMN processing_rule varchar(50) AFTER flow_profile;';
+							print "Run sql6 ".$sql6."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql6);
+							}
+							$sql7 = 'ALTER TABLE llx_einvoicing_lifecycle_msg ADD COLUMN lc_recipient_roles varchar(50) NULL AFTER lc_reason_code;';
+							print "Run sql7 ".$sql7."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql7);
+							}
+							$sql8 = 'CREATE TABLE llx_einvoicing_sync_pending (rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL, entity integer DEFAULT 1 NOT NULL, provider varchar(50) NOT NULL,	flow_id varchar(255) NOT NULL, flow_direction varchar(10), flow_type varchar(64), tracking_idref varchar(255), fk_element_type varchar(100), fk_element_id integer, reason_code varchar(64), reason_message text, action_data mediumtext, action_html mediumtext, match_data mediumtext, flow_updatedat datetime, nb_attempts integer DEFAULT 0, date_lastattempt datetime, status integer DEFAULT 0 NOT NULL, date_creation datetime NOT NULL, tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, fk_user_creat integer NOT NULL, fk_user_modif integer) ENGINE = innodb;';
+							print "Run sql8 ".$sql8."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql8);
+							}
+							$sql9 = 'ALTER TABLE llx_einvoicing_sync_pending ADD UNIQUE INDEX uk_einvoicing_sync_pending_flow (entity, provider, flow_id);';
+							print "Run sql9 ".$sql9."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql9);
+							}
+							$sql10 = 'ALTER TABLE llx_einvoicing_sync_pending ADD INDEX idx_einvoicing_sync_pending_status (entity, status, flow_updatedat);';
+							print "Run sql10 ".$sql10."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql10);
+							}
+							$sql11 = 'ALTER TABLE llx_einvoicing_call MODIFY COLUMN request_body mediumtext;';
+							print "Run sql11 ".$sql11."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql11);
+							}
+							$sql12 = 'ALTER TABLE llx_einvoicing_call MODIFY COLUMN response mediumtext;';
+							print "Run sql12 ".$sql12."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql12);
+							}
+							$sql13 = 'ALTER TABLE llx_einvoicing_call MODIFY COLUMN processing_result mediumtext;';
+							print "Run sql13 ".$sql13."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql13);
+							}
+
+							// Update the note of constant MAIN_MODULE_EINVOICING with the version of module at time of deployment
+							$einvoicingmoduleversion = 'unknown';
+							foreach ($deployarray as $deploy) {
+								if (empty($deploy["src"])) {
+									continue;
+								}
+								// The VERSION file in src contains the raw module version, for example 1.5.0
+								$versionfile = $deploy["src"]."/VERSION";
+								if (dol_is_file($versionfile)) {
+									print "Search in file ".$versionfile."\n";
+									$contentfile = trim(file_get_contents($versionfile));
+									if (!empty($contentfile)) {
+										print "File found with version ".$contentfile."\n";
+										$einvoicingmoduleversion = $contentfile;
+										break;
+									}
+								}
+								$arrayofdescriptortofile = array($deploy["src"]."/core/modules/modEInvoicing.class.php", $deploy["src"]."/einvoicing/core/modules/modEInvoicing.class.php");
+								foreach ($arrayofdescriptortofile as $descriptortofile) {
+									print "Search in file ".$descriptortofile."\n";
+									if (dol_is_file($descriptortofile)) {
+										print "File found\n";
+										$contentfile = file_get_contents($descriptortofile);
+										$reg = array();
+										if (preg_match('/\$this->version\s*=\s*[\'"]([^\'"]+)[\'"]/', $contentfile, $reg)) {
+											$einvoicingmoduleversion = $reg[1];
+											break 2;
+										}
+									} else {
+										print "File NOT found\n";
+									}
+								}
+							}
+							$noteofconstant = json_encode(array('authorid' => "0", 'ip' => "127.0.0.1", 'lastactivationversion' => $einvoicingmoduleversion));
+							$sql14 = "UPDATE llx_const SET note = '".$dbinstance->escape($noteofconstant)."' WHERE name = '".$dbinstance->escape('MAIN_MODULE_EINVOICING')."'";
+							print "Run sql14 ".$sql14."\n";
+							if ($mode == "confirm") {
+								$dbinstance->query($sql14);
+							}
+
+							if ($mode != "confirm") {
+								print "Rollback\n";
+								$dbinstance->rollback();
+							} else {
+								print "Commit\n";
+								$dbinstance->commit();
+							}
+
+							$dbinstance->close();
+						} else {
+							print "Failed to connect to database of instance ".$localhostnamedb.", ".$username_db.", ".$database_db.", ".$port_db."\n";
+						}
+					}
+				}
+			}
+			if (!$error) {
+				if ($mode != "confirm") {
+					$db->rollback();
+					$nbdeploynothingdone++;
+				} else {
+					$db->commit();
+					$nbdeployok++;
+				}
+			} else {
+				$db->rollback();
+				$nbdeployko++;
+			}
+			$i++;
+		}
+	}
+} else {
+	$error++;
+	//$nboferrors++;
+	dol_print_error($db);
+}
+
+print("Deployment ended with ".$nbdeployok." contract without error, ".$nbdeployko." contract with error. ".$nbdeploynothingdone." contract were already present in contract.\n");
+print "\n";

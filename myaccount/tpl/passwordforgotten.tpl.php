@@ -16,10 +16,19 @@
  */
 
 // Need global variable to be defined by caller (like dol_loginfunction)
-// $title
 // $urllogo
 // $focus_element
 // $message
+
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ *
+ * @var Societe $partnerthirdparty
+ * @var string $title
+ */
 
 // Protection to avoid direct call of template
 if (empty($conf) || ! is_object($conf)) {
@@ -64,15 +73,16 @@ if (! preg_match('/'.constant('DOL_APPLICATION_TITLE').'/', $titleofpage)) {
 	$disablenofollow=0;
 }
 
+if (empty($head)) {
+	$head = '';
+}
+
 $favicon=getDomainFromURL($_SERVER['SERVER_NAME'], 0);
 if (! preg_match('/\.(png|jpg)$/', $favicon)) {
 	$favicon.='.png';
 }
 if (getDolGlobalString('MAIN_FAVICON_URL')) {
 	$favicon=getDolGlobalString('MAIN_FAVICON_URL');
-}
-if (empty($head)) {
-	$head = '';
 }
 if ($favicon) {
 	$href = 'img/'.$favicon;
@@ -159,13 +169,13 @@ if (empty($linklogo)) {               // Show main logo of Cloud service
 		if (is_readable($conf->mycompany->dir_output.'/logos/thumbs/' . getDolGlobalString($constlogosmall))) {
 			$linklogo=DOL_URL_ROOT.'/viewimage.php?cache=1&modulepart=mycompany&file='.urlencode('logos/thumbs/' . getDolGlobalString($constlogosmall));
 		}
-	} elseif (empty($urllogo) && getDolGlobalString($constlogo)) {
+	} elseif (empty($linklogo) && getDolGlobalString($constlogo)) {
 		if (is_readable($conf->mycompany->dir_output.'/logos/' . getDolGlobalString($constlogo))) {
 			$linklogo=DOL_URL_ROOT.'/viewimage.php?cache=1&modulepart=mycompany&file='.urlencode('logos/' . getDolGlobalString($constlogo));
 		}
-	} elseif (empty($urllogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/'.$conf->theme.'/img/dolibarr_logo.png')) {
+	} elseif (empty($linklogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/'.$conf->theme.'/img/dolibarr_logo.png')) {
 		$linklogo=DOL_URL_ROOT.'/theme/'.$conf->theme.'/img/dolibarr_logo.png';
-	} elseif (empty($urllogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/dolibarr_logo.png')) {
+	} elseif (empty($linklogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/dolibarr_logo.png')) {
 		$linklogo=DOL_URL_ROOT.'/theme/dolibarr_logo.png';
 	} else {
 		$linklogo=DOL_URL_ROOT.'/theme/login_logo.png';
@@ -182,15 +192,6 @@ if (!GETPOSTINT('noheader')) {
 		  </div>
 		  <?php if (empty($mythirdparty->id)) {	?>
 		  <div class="paddingtop20" style="float: right;">
-			  <!--
-			  <div class="btn-sm">
-			  <span class="opacitymedium hideonsmartphone paddingright valignmiddle"><?php echo $langs->trans("AlreadyHaveAnAccount"); ?></span>
-				<?php if (! empty($partner) || ! empty($partnerkey)) {
-					print '<br class="hideonsmartphone">';
-				} ?>
-			  <a href="/" class="btn blue btn-sm btnalreadyanaccount valignmiddle"><?php echo $langs->trans("LoginAction"); ?></a>
-			  </div>
-			  -->
 				<?php if (! empty($homepage)) { ?>
 			  <div class="btn-sm home-page-url">
 			  <span class="opacitymedium"><a class="blue btn-sm" style="padding-left: 0;" href="<?php echo $homepage ?>"><?php echo $langs->trans("BackToHomePage"); ?></a></span>
@@ -209,6 +210,21 @@ if (!GETPOSTINT('noheader')) {
 </div>
 	<?php
 }
+
+
+// Test if dashboard is allowed or not
+if (getDolGlobalString('SELLYOURSAAS_DASHBOARD_OFF')) {
+	print '<center><div class="warning"><br><br><br>';
+	print $langs->trans("DashboardServiceIsTemporarlyOffline");
+	print '<br>';
+	print $langs->trans("PleaseGoBackInFewHours");
+	print '<br><br><br></div></center>';
+
+	print '</body>';
+	print '</html>';
+	exit;
+}
+
 ?>
 
 
@@ -220,17 +236,19 @@ if (!GETPOSTINT('noheader')) {
 <input type="hidden" name="token" value="<?php echo newToken(); ?>">
 <input type="hidden" name="action" value="buildnewpassword">
 
+<header class="register2">
+			<div class="customregisterheader2">
+				<h1><?php echo dol_escape_htmltag($title); ?></h1>
+			</div>
+</header>
 
 <div class="signup">
 
-<div class="block medium">
-
-		<header class="inverse">
-		  <h1><?php echo dol_escape_htmltag($title); ?></h1>
+<div class="block medium center signup2">
 
 <div class="center login_main_home divpasswordmessagedesc paddingtopbottom<?php echo getDolGlobalString('MAIN_LOGIN_BACKGROUND') ? ' backgroundsemitransparent' : ''; ?>">
 <?php if ($mode == 'dolibarr' || ! $disabled) { ?>
-	<span class="passwordmessagedesc opacitymedium">
+	<span class="passwordmessagedesc opacitymedium inline-block" style="display: inline-block; font-size: 0.85em; margin-top: 4px; margin-bottom: 40px; line-height: 1.5em;">
 	<?php
 	if (empty($asknewpass) && !preg_match('/class="(ok|warning)"/', $message)) {
 		echo str_replace('<br>', ' ', $langs->trans('SendNewPasswordDesc'));
@@ -243,9 +261,6 @@ if (!GETPOSTINT('noheader')) {
 	</div>
 <?php } ?>
 </div>
-
-		</header>
-
 
 <div class="login_table">
 
@@ -324,7 +339,7 @@ if (! preg_match('/class="(ok|warning)"/', $message)) {
 	<td><a href="<?php echo $php_self; ?>" tabindex="4"><?php echo $captcha_refresh; ?></a></td>
 	</tr></table>
 
-	</br>
+	<br>
 	</td></tr>
 		<?php
 	} ?>
@@ -395,7 +410,7 @@ if (empty($asknewpass) && ! preg_match('/class="(ok|warning)"/', $message)) {
 		$moreparam .= (strpos($moreparam, '?')===false ? '?' : '&').'username='.urlencode($username);
 	}
 
-	print '<a class="alogin" href="'.$dol_url_root.'/index.php'.$moreparam.'">('.((empty($asknewpass) || $asknewpass == 2) ? $langs->trans('BackToLoginPage') : $langs->trans("Cancel")).')</a>';
+	print '<a class="alogin small" href="'.$dol_url_root.'/index.php'.$moreparam.'">('.((empty($asknewpass) || $asknewpass == 2) ? $langs->trans('BackToLoginPage') : $langs->trans("Cancel")).')</a>';
 	?>
 </div>
 

@@ -15,6 +15,24 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var Form $form
+ * @var Translate $langs
+ *
+ * @var Societe $mythirdpartyaccount
+ * @var int $welcomecid
+ * @var int $nbofinstancesdone
+ * @var int $nbofinstancessuspended
+ * @var int $nbofinstancesdonereseller
+ * @var int $nbofinstancessuspendedreseller
+ * @var int $nbofinstancesdonemodules
+ * @var int $nbofinstancessuspendedmodules
+ * @var array<int,mixed> $listofcontractid
+ * @var int $atleastonepaymentmode
+ */
+
 // Protection to avoid direct call of template
 if (empty($conf) || ! is_object($conf)) {
 	print "Error, template page can't be called as URL";
@@ -25,33 +43,34 @@ if (empty($conf) || ! is_object($conf)) {
 <!-- BEGIN PHP TEMPLATE dashboard.tpl.php -->
 <?php
 
-	print '
+print '
 	<div class="page-content-wrapper">
 			<div class="page-content">
 
-	     <!-- BEGIN PAGE HEADER-->
+    <!-- BEGIN PAGE HEADER-->
 	<!-- BEGIN PAGE HEAD -->
 	<div class="page-head">
-	  <!-- BEGIN PAGE TITLE -->
-	<div class="page-title">
-	  <h1>'.$langs->trans("Dashboard").'</h1>
-	</div>
-	<!-- END PAGE TITLE -->
-
-
+		<!-- BEGIN PAGE TITLE -->
+		<div class="page-title">
+		  <h1>'.$langs->trans("Dashboard").'</h1>
+		</div>
+		<!-- END PAGE TITLE -->
 	</div>
 	<!-- END PAGE HEAD -->
 	<!-- END PAGE HEADER-->
 
 
-	    <div class="row">';
+	<div class="row">';
 
+
+	print '
+	<!-- BEGIN COL MY INSTANCES -->
+	<div class="col-md-6">
+	<!-- BEGIN PORTLET id=planSection -->
+	<div class="portlet light" id="planSection">';
 
 if ($mythirdpartyaccount->client > 0) {
-	print '<div class="col-md-6">
-
-	        <div class="portlet light" id="planSection">
-
+	print '
 	          <div class="portlet-title">
 	            <div class="caption">
 	              <i class="fa fa-server font-green-sharp paddingright"></i><span class="caption-subject font-green-sharp bold uppercase">'.$langs->trans("MyInstances").'</span>
@@ -67,20 +86,20 @@ if ($mythirdpartyaccount->client > 0) {
 	              <div class="col-md-4 right">
 	                <h2>'.$nbofinstancesdone.'</h2>
 	              </div>
-	            </div> <!-- END ROW -->
+	            </div>
 
 				';
 	if ($nbofinstancessuspended) {
 		print '
-			            <div class="row">
-			              <div class="col-md-8">
-							'.$langs->trans("NbOfSuspendedInstances").'
-			              </div>
-			              <div class="col-md-4 right">
-			                <h2 style="color:orange">'.$nbofinstancessuspended.'</h2>
-			              </div>
-			            </div> <!-- END ROW -->
-					';
+				            <div class="row">
+				              <div class="col-md-8">
+								'.$langs->trans("NbOfSuspendedInstances").'
+				              </div>
+				              <div class="col-md-4 right">
+				                <h2 style="color:orange">'.$nbofinstancessuspended.'</h2>
+				              </div>
+				            </div>
+						';
 	}
 
 	print '
@@ -88,15 +107,21 @@ if ($mythirdpartyaccount->client > 0) {
 					<div class="center col-md-12">
 						<br>
 						<a class="wordbreak btn" href="'.$_SERVER["PHP_SELF"].'?mode=instances" class="btn default btn-xs green-stripe">'.$langs->trans("SeeDetailsAndOptions").'</a>
-					</div></div>';
+					</div>
+					</div>';
 
 	print '
 				</div>';		// end protlet-body
+}
 
-	if ($mythirdpartyaccount->isareseller) {
-		print '
+if ($mythirdpartyaccount->client > 0 && $mythirdpartyaccount->isareseller) {
+	print '<br><br>';
+}
+
+if ($mythirdpartyaccount->isareseller) {
+	print '
 				<div class="portlet-title">
-				<div class="caption"><br><br>
+				<div class="caption">
 				<i class="fa fa-server font-green-sharp paddingright"></i><span class="caption-subject font-green-sharp bold uppercase">'.$langs->trans("InstancesOfMyCustomers").'</span>
 				</div>
 				</div>
@@ -110,11 +135,11 @@ if ($mythirdpartyaccount->client > 0) {
 				<div class="col-md-4 right">
 				<h2>'.$nbofinstancesdonereseller.'</h2>
 				</div>
-			</div> <!-- END ROW -->
+				</div>
 
 				';
-		if ($nbofinstancessuspendedreseller) {
-			print '
+	if ($nbofinstancessuspendedreseller) {
+		print '
 						<div class="row">
 						<div class="col-md-8">
 						'.$langs->trans("NbOfSuspendedInstances").'
@@ -122,26 +147,75 @@ if ($mythirdpartyaccount->client > 0) {
 						<div class="col-md-4 right">
 						<h2 style="color:orange">'.$nbofinstancessuspendedreseller.'</h2>
 						</div>
-						</div> <!-- END ROW -->
+						</div>
 						';
-		}
+	}
 
-		print '
+	print '
 						<div class="row">
 						<div class="center col-md-12">
 							<br>
 							<a class="wordbreak btn" href="'.$_SERVER["PHP_SELF"].'?mode=mycustomerinstances" class="btn default btn-xs green-stripe">'.$langs->trans("SeeDetailsAndOptionsOfMyCustomers").'</a>
-						</div></div>';
+						</div>
+						</div>';
 
-		print '</div>';		// end portlet-body
+	print '</div>';		// end portlet-body
+}
+
+if (($mythirdpartyaccount->client > 0 || $mythirdpartyaccount->isareseller) && !empty($mythirdpartyaccount->context['isamoduleprovider'])) {
+	print '<br><br>';
+}
+
+if (!empty($mythirdpartyaccount->context['isamoduleprovider'])) {
+	print '
+				<div class="portlet-title">
+				<div class="caption">
+				<i class="fa fa-server font-green-sharp paddingright"></i><span class="caption-subject font-green-sharp bold uppercase">'.$langs->trans("InstancesWithMyModules").'</span>
+				</div>
+				</div>
+
+				<div class="portlet-body">
+
+				<div class="row">
+				<div class="col-md-8">
+				'.$langs->trans("NbOfActiveInstances").'
+				</div>
+				<div class="col-md-4 right">
+				<h2>'.$nbofinstancesdonemodules.'</h2>
+				</div>
+				</div>
+
+				';
+	if ($nbofinstancessuspendedmodules) {
+		print '
+						<div class="row">
+						<div class="col-md-8">
+						'.$langs->trans("NbOfSuspendedInstances").'
+						</div>
+						<div class="col-md-4 right">
+						<h2 style="color:orange">'.$nbofinstancessuspendedmodules.'</h2>
+						</div>
+						</div>
+						';
 	}
 
 	print '
+						<div class="row">
+						<div class="center col-md-12">
+							<br>
+							<a class="wordbreak btn" href="'.$_SERVER["PHP_SELF"].'?mode=mymodulecustomerinstances" class="btn default btn-xs green-stripe">'.$langs->trans("SeeDetailsOfInstancesWithMyModules").'</a>
+						</div>
+						</div>';
 
-	        </div> <!-- END PORTLET -->
-
-	      </div> <!-- END COL MY INSTANCES-->';
+	print '</div>';		// end portlet-body
 }
+
+
+
+print '
+
+     </div> <!-- END PORTLET id=planSection -->
+	 </div> <!-- END COL MY INSTANCES-->';
 
 
 print '
@@ -160,16 +234,8 @@ print '
 				<div class="col-md-12">
 	                ';
 if (empty($welcomecid)) {		// If we just created an instance, we don't show warnings yet.
-	$missing = 0;
-	if (empty($mythirdpartyaccount->array_options['options_firstname'])) {
-		$missing++;
-	}
-	if (empty($mythirdpartyaccount->array_options['options_lastname'])) {
-		$missing++;
-	}
-	if ($mythirdpartyaccount->tva_assuj && empty($mythirdpartyaccount->tva_intra) && !getDolGlobalString('SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE')) {
-		$missing++;
-	}
+	// Define if mandatory contact information are complete
+	$missing = !isMandatoryInfoSet($mythirdpartyaccount);
 
 	if (! $missing) {
 		print $langs->trans("ProfileIsComplete");
@@ -219,64 +285,65 @@ if ($mythirdpartyaccount->client > 0) {
 				//dol_sort_array($contract->linkedObjects['facture'], 'date');
 				$nbinvoicenotpayed = 0;
 				$amountdue = 0;
-foreach ($listofcontractid as $id => $contract) {
-	$contract->fetchObjectLinked();
-	if (isset($contract->linkedObjects['facture']) && is_array($contract->linkedObjects['facture'])) {
-		foreach ($contract->linkedObjects['facture'] as $idinvoice => $invoice) {
-			print '<!--';
-			print dol_escape_htmltag($invoice->ref.'-'.$invoice->total_ht."-".$invoice->type."-status=".$invoice->statut."-paye=".$invoice->paye)."\n";
-			print '-->';
-			if ($invoice->statut == $invoice::STATUS_DRAFT) {
-				continue;
-			}
-			if ($invoice->statut == $invoice::STATUS_VALIDATED) {
-				$nbinvoicenotpayed++;
-				$alreadypayed = $invoice->getSommePaiement();
-				$amount_credit_notes_included = $invoice->getSumCreditNotesUsed();
-				$amountdue += $invoice->total_ttc - $alreadypayed - $amount_credit_notes_included;
+	foreach ($listofcontractid as $id => $contract) {
+		$contract->fetchObjectLinked();
+		if (isset($contract->linkedObjects['facture']) && is_array($contract->linkedObjects['facture'])) {
+			$contract->linkedObjects['facture'] = dol_sort_array($contract->linkedObjects['facture'], 'ref');
+			foreach ($contract->linkedObjects['facture'] as $idinvoice => $invoice) {
+				print '<!--';
+				print dol_escape_htmltag($invoice->ref.'-'.$invoice->total_ht."-".$invoice->type."-status=".$invoice->status."-paye=".$invoice->paye)."\n";
+				print '-->';
+				if ($invoice->statut == $invoice::STATUS_DRAFT) {
+					continue;
+				}
+				if ($invoice->statut == $invoice::STATUS_VALIDATED) {
+					$nbinvoicenotpayed++;
+					$alreadypayed = $invoice->getSommePaiement();
+					$amount_credit_notes_included = $invoice->getSumCreditNotesUsed();
+					$amountdue += ($invoice->total_ttc - $alreadypayed - $amount_credit_notes_included);
+				}
 			}
 		}
 	}
-}
 				print '
 	          <div class="portlet-body">
 
 				<div class="row">
 				<div class="col-md-8">
 	            ';
-if ($amountdue > 0 && $atleastonepaymentmode) {
-	print $form->textwithpicto($langs->trans("UnpaidInvoices"), $langs->trans("PaymentWillBeProcessedSoon"));
-} else {
-	print $langs->trans("UnpaidInvoices");
-}
+	if ($amountdue > 0 && $atleastonepaymentmode) {
+		print $form->textwithpicto($langs->trans("UnpaidInvoices"), $langs->trans("PaymentWillBeProcessedSoon"));
+	} else {
+		print $langs->trans("UnpaidInvoices");
+	}
 				print '
                 				</div>
                 				<div class="col-md-4 right"><h2>';
-if ($nbinvoicenotpayed > 0) {
-	print '<font style="color: orange">';
-}
+	if ($nbinvoicenotpayed > 0) {
+		print '<font style="color: orange">';
+	}
 				print $nbinvoicenotpayed;
-if ($nbinvoicenotpayed) {
-	print '</font>';
-}
+	if ($nbinvoicenotpayed) {
+		print '</font>';
+	}
 				print '<h2></div>
                 	            </div>
                 				<div class="row">
                 				<div class="col-md-8">';
-if (($amountdue > 0 || $nbinvoicenotpayed > 0) && $atleastonepaymentmode) {
-	print $form->textwithpicto($langs->trans("RemainderToPay"), $langs->trans("PaymentWillBeProcessedSoon"));
-}
+	if (($amountdue > 0 || $nbinvoicenotpayed > 0) && $atleastonepaymentmode) {
+		print $form->textwithpicto($langs->trans("RemainderToPay"), $langs->trans("PaymentWillBeProcessedSoon"));
+	}
 				print '</div>
                 				<div class="col-md-4 right"><h2>';
-if ($amountdue > 0) {
-	print '<font style="color: orange; white-space: nowrap;">';
-}
-if ($amountdue > 0 || $nbinvoicenotpayed > 0) {
-	print price($amountdue, 1, $langs, 0, -1, 'MT', $conf->currency);
-}
-if ($amountdue > 0) {
-	print '</font>';
-}
+	if ($amountdue > 0) {
+		print '<font style="color: orange; white-space: nowrap;">';
+	}
+	if ($amountdue > 0 || $nbinvoicenotpayed > 0) {
+		print price($amountdue, 1, $langs, 0, -1, 'MT', $conf->currency);
+	}
+	if ($amountdue > 0) {
+		print '</font>';
+	}
 				print '</h2></div>
 	            </div>
 
@@ -306,6 +373,23 @@ if (!$sellyoursaassupporturl) {
 	$nboftickets = 0;
 	$nbofopentickets = 0;
 
+	// Count number of tickets (total + open)
+	$sql = "SELECT COUNT(t.rowid) as nb, t.fk_statut as status";
+	$sql .= " FROM ".MAIN_DB_PREFIX."ticket as t";
+	$sql .= " WHERE t.fk_soc = ".((int) $mythirdpartyaccount->id);
+	$sql .= " GROUP BY t.fk_statut";
+	$resql = $db->query($sql);
+	if ($resql) {
+		while ($obj = $db->fetch_object($resql)) {
+			$nboftickets += $obj->nb;
+			if ($obj->status != Ticket::STATUS_CANCELED || $obj->status != Ticket::STATUS_CLOSED) {
+				$nbofopentickets += $obj->nb;
+			}
+		}
+	} else {
+		dol_print_error($db);
+	}
+
 	print '
 				<!-- Box of tickets -->
 				<div class="col-md-6">
@@ -314,7 +398,10 @@ if (!$sellyoursaassupporturl) {
 							<div class="caption">
 								<i class="fa fa-hands-helping font-green-sharp paddingright"></i><span class="caption-subject font-green-sharp bold uppercase">'.$langs->trans("SupportTickets").'</span>
 							</div>
-						</div>
+						</div>';
+
+	if (getDolGlobalString('SELLYOURSAAS_SUPPORT_TICKET_CREATE')) {
+		print '
 						<div class="portlet-body">
 							<div class="row">
 								<div class="col-md-8">
@@ -323,36 +410,59 @@ if (!$sellyoursaassupporturl) {
 								<div class="col-md-4 right">
 									<h2>'.$nboftickets.'</h2>
 								</div>
-							</div> <!-- END ROW -->
-							<div class="row">
-								<div class="col-md-8">
-									'.$langs->trans("NbOfOpenTickets").'
-								</div>
-								<div class="col-md-4 right">
-									<h2>';
-	if ($nbofopentickets > 0) {
-		print '<font style="color: orange;">';
-	}
-	print $nbofopentickets;
-	if ($nbofopentickets > 0) {
-		print '</font>';
-	}
-	print '</h2>
-								</div>
-							</div> <!-- END ROW -->
+							</div>';
+
+		if (getDolGlobalString('SELLYOURSAAS_SUPPORT_TICKET_SHOW_STATUS')) {
+			print '
+								<div class="row">
+									<div class="col-md-8">
+										'.$langs->trans("NbOfOpenTickets").'
+									</div>
+									<div class="col-md-4 right">
+										<h2>';
+			if ($nbofopentickets > 0) {
+					print '<font style="color: orange;">';
+			}
+					print $nbofopentickets;
+			if ($nbofopentickets > 0) {
+							print '</font>';
+			}
+									print '</h2>
+									</div>
+								</div>';
+		}
+
+					print '
 							<div class="row">
 								<div class="center col-md-12">
 									<br />
 									<a class="wordbreak btn" href="'.$_SERVER["PHP_SELF"].'?mode=support" class="btn default btn-xs green-stripe">'.$langs->trans("SeeDetailsOfTickets").'</a>
 								</div>
 							</div>
-						</div> <!-- END PORTLET-BODY -->
+
+						</div> <!-- END PORTLET-BODY -->';
+	} else {
+					print '
+							<div class="row">
+								<div class="center col-md-12">
+									<br />
+									<a class="wordbreak btn" href="'.$_SERVER["PHP_SELF"].'?mode=support" class="btn default btn-xs green-stripe">'.$langs->trans("SendATicket").'</a>
+								</div>
+							</div>
+
+						</div> <!-- END PORTLET-BODY -->';
+	}
+
+
+
+	print '
+
 					</div> <!-- END PORTLET boxOfTickets -->
 				</div><!-- END COL -->';
 }
 
 	print '
-				</div> <!-- END ROW -->
+				</div>
 			</div>
 		</div>
 	</div>

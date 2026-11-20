@@ -208,7 +208,7 @@ if (empty($backupdumpdayfrequency)) {
 }
 // Load Dolibarr environment
 $res=0;
-// Try master.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try master.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -240,7 +240,7 @@ if (! $res && file_exists($dolibarrdir."/htdocs/master.inc.php")) {
 	$res=@include $dolibarrdir."/htdocs/master.inc.php";
 }
 if (! $res) {
-	print("Include of master fails");
+	print("Include of master fails\n");
 	exit(-1);
 }
 
@@ -270,14 +270,6 @@ if (empty($EMAILTO)) {
 }
 
 $OPTIONS = "-4 --prune-empty-dirs --stats -rlt --chmod=u=rwX";
-
-if (`rsync --help | grep -- --open-noatime`) {
-	$OPTIONS = $OPTIONS.' --open-noatime';
-} elseif (`rsync --help | grep -- --noatime`) {
-	$OPTIONS = $OPTIONS." --noatime";
-} else {
-	// no evidence rsync supports --noatime => we don't use the option at all
-}
 
 if ($RSYNCDELETE == 1) {
 	$OPTIONS = $OPTIONS." --delete --delete-excluded";
@@ -325,6 +317,21 @@ if ($dbmaster) {
 }
 if (empty($db)) {
 	$db = $dbmaster;
+}
+
+$utils = new Utils($db);
+
+// Detect options supported by rsync (use executeCli that uses exec() instead of the shell_exec backtick operator)
+$result = $utils->executeCli("rsync --help | grep -- --open-noatime", "", 0, null, 1);
+if (trim($result["output"]) != '') {
+	$OPTIONS = $OPTIONS.' --open-noatime';
+} else {
+	$result = $utils->executeCli("rsync --help | grep -- --noatime", "", 0, null, 1);
+	if (trim($result["output"]) != '') {
+		$OPTIONS = $OPTIONS." --noatime";
+	} else {
+		// no evidence rsync supports --noatime => we don't use the option at all
+	}
 }
 
 $user = new User($dbmaster);
@@ -429,7 +436,7 @@ if (!empty($instanceserver)) {
 
 	$dbtousetosearch = $dbmaster;
 
-	print $sql."\n\n";                                    // To have this into the ouput of cron job
+	print $sql."\n\n";                                    // To have this into the output of cron job
 	$resql=$dbtousetosearch->query($sql);
 	if ($resql) {
 		$num = $dbtousetosearch->num_rows($resql);

@@ -15,6 +15,26 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ * @var User $user
+ *
+ * @var Form $form
+ * @var Societe $mythirdpartyaccount
+ * @var string $search_instance_name
+ * @var string $search_customer_name
+ * @var string $mode
+ * @var int $firstrecord
+ * @var int $lastrecord
+ * @var array $listofcontractidreseller
+ * @var string $initialaction
+ * @var array $arrayofplans
+ * @var array $arrayofplansfull
+ */
+
 // Protection to avoid direct call of template
 if (empty($conf) || ! is_object($conf)) {
 	print "Error, template page can't be called as URL";
@@ -243,8 +263,15 @@ if (count($listofcontractidreseller) == 0) {
 
 		// Customer (link to login on customer dashboard)
 		print '<span class="opacitymedium">'.$langs->trans("Customer").' : </span>'.$tmpcustomer->name;
-		$dol_login_hash=dol_hash(getDolGlobalString('SELLYOURSAAS_KEYFORHASH') . $tmpcustomer->email.dol_print_date(dol_now(), 'dayrfc'), 5);	// hash is valid one hour
-		print ' &nbsp;-&nbsp; <a target="_blankcustomer" href="'.$_SERVER["PHP_SELF"].'?mode=logout_dashboard&username='.urlencode($tmpcustomer->email).'&password=&login_hash='.urlencode($dol_login_hash).'"><span class="fa fa-desktop"></span><span class="hideonsmartphone"> '.$langs->trans("LoginWithCustomerAccount").'</span></a>';
+		print ' &nbsp; - &nbsp; '.dol_print_email($tmpcustomer->email, 0, 0, 1, 0, 1, 1);
+		if ($tmpcustomer->phone) {
+			print ' &nbsp; - &nbsp; '.dol_print_phone($tmpcustomer->phone, $tmpcustomer->country_code, 0, $tmpcustomer->id, '', '&nbsp;', 'phone');
+		}
+		// Add link to login to dashboard with customer account
+		/*
+		$dol_login_hash = dol_hash(getDolGlobalString('SELLYOURSAAS_KEYFORHASH') . $tmpcustomer->email.dol_print_date(dol_now(), 'dayrfc'), 5);	// hash is valid one hour
+		print ' &nbsp; - &nbsp; <a target="_blankcustomer" href="'.$_SERVER["PHP_SELF"].'?mode=logout_dashboard&username='.urlencode($tmpcustomer->email).'&password=&login_hash='.urlencode($dol_login_hash).'"><span class="fa fa-desktop"></span><span class="hideonsmartphone"> '.$langs->trans("LoginWithCustomerAccount").'</span></a>';
+		*/
 		print '<br>';
 
 		// URL
@@ -257,8 +284,8 @@ if (count($listofcontractidreseller) == 0) {
 			}
 			print ' : </span>';
 			print '<a class="font-green-sharp linktoinstance" href="https://'.$contract->ref_customer.'" target="blankinstance">';
+			print img_picto($langs->trans("YourURLToGoOnYourAppInstance"), 'globe', 'class="paddingright"');
 			print 'https://'.$contract->ref_customer;
-			print img_picto($langs->trans("YourURLToGoOnYourAppInstance"), 'globe', 'class="paddingleft"');
 			print '</a>';
 			print '</span><br>';
 		}
@@ -411,6 +438,7 @@ if (count($listofcontractidreseller) == 0) {
 					} elseif ($tmpproduct->duration == '1y') {
 						$tmpduration.=' / '.$langs->trans("DurationYear");
 					} else {
+						$regs = array();
 						preg_match('/^([0-9]+)([a-z]{1})$/', $tmpproduct->duration, $regs);
 						if (! empty($regs[1]) && ! empty($regs[2])) {
 							$tmpduration.=' / '.$regs[1].' '.($regs[2] == 'm' ? $langs->trans("Month") : ($regs[2] == 'y' ? $langs->trans("DurationYear") : ''));
@@ -504,7 +532,7 @@ if (count($listofcontractidreseller) == 0) {
 			if ($statuslabel != 'undeployed') {
 				if ($priceinvoicedht == $contract->total_ht) {
 					// Disabled on "My customer invoices" view
-					//print ' - <a href="'.$_SERVER["PHP_SELF"].'?mode=mycustomerinstances&action=changeplan&id='.$contract->id.'#contractid'.$contract->id.'">'.$langs->trans("ChangePlan").'</a>';
+					//print ' - <a href="'.$_SERVER["PHP_SELF"].'?mode=mycustomerinstances&action=changeplan&token='.newToken().'&id='.$contract->id.'#contractid'.$contract->id.'">'.$langs->trans("ChangePlan").'</a>';
 				}
 			}
 		}
@@ -557,7 +585,7 @@ if (count($listofcontractidreseller) == 0) {
 							print "</form>";
 						} else {
 							print $langs->trans("TrialUntil", dol_print_date($contract->array_options['options_date_endfreeperiod'], 'day'));
-							print '<a href="'.$_SERVER["PHP_SELF"].'?mode=mycustomerinstances&action=editfreeperiod&idcontract='.$contract->id.'&token='.newToken().'#contractid'.$contract->id.'"> '.img_edit().'</a>';
+							print '<a href="'.$_SERVER["PHP_SELF"].'?mode=mycustomerinstances&action=editfreeperiod&token='.newToken().'&idcontract='.$contract->id.'#contractid'.$contract->id.'"> '.img_edit().'</a>';
 						}
 					} else {
 						print $langs->trans("Trial");
@@ -792,7 +820,7 @@ if (count($listofcontractidreseller) == 0) {
 	// Force flag to not be an external use to be able to see all thirdparties
 	$user->socid = 0;
 
-	$selectofthirdparties = $form->select_company('', 'reusesocid', 'parent = '.$mythirdpartyaccount->id, '1', 0, 1, array(), 0, 'centpercent');
+	$selectofthirdparties = $form->select_company('', 'reusesocid', '(parent:=:'.$mythirdpartyaccount->id.')', '1', 0, 1, array(), 0, 'centpercent');
 
 if ($form->result['nbofthirdparties'] == 0) {
 	print '<span class="opacitymedium">'.$langs->trans("YouDontHaveCustomersYet").'...</span><br>';
@@ -993,7 +1021,9 @@ if (getDolGlobalInt('SELLYOURSAAS_DISABLE_NEW_INSTANCES') && !in_array(getUserRe
 				$restrict_domains = explode(",", $tmpplan['restrict_domains']);
 				foreach ($restrict_domains as $domain) {
 					print " if (pid == ".$key.") { disable_combo_if_not('".$domain."'); }\n";
-					break;
+					if ($domain == $domainname) {
+						break;	// We keep only the first domain in list as the domain to keep possible for deployment
+					}
 				}
 			} else {
 				print '	/* No restriction for pid = '.$key.', currentdomain is '.$domainname.' */'."\n";

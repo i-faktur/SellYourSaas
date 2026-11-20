@@ -15,7 +15,16 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// $initialaction can be set
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var Translate $langs
+ *
+ * @var string $initialaction can be set
+ * @var Societe $mythirdpartyaccount
+ * @var array $listofcontractid
+ * @var array $listofcontractidopen
+ */
 
 // Protection to avoid direct call of template
 if (empty($conf) || ! is_object($conf)) {
@@ -53,7 +62,7 @@ if (!empty($plan)) {		// If ref of product was forced via plan=... parameter
 		$productref = $plan;
 	}
 	$listofplanref = '';
-	foreach($planarray as $tmpplanref) {
+	foreach ($planarray as $tmpplanref) {
 		$listofplanref .= ($listofplanref ? "," : "")."'".$db->escape($tmpplanref)."'";
 	}
 	$sqlproducts .= " AND p.ref IN (".$db->sanitize($listofplanref, 1).")";
@@ -112,6 +121,13 @@ if ($resqlproducts) {
 					} elseif ($tmpprodchild->array_options['options_app_or_option'] == 'system') {
 						// Don't add system services to global price, these are options with calculated quantities
 					} else {
+						if (!empty($tmpprodchild->array_options["options_only_for_country"])) {
+							$optioncountries = preg_split("/[\s,;]+/", $tmpprodchild->array_options["options_only_for_country"]);
+							if (!in_array(dol_strtolower($mythirdpartyaccount->country_code), $optioncountries)) {
+								// Thirdparty country code isn't in options_only_for_country array so we don't show price
+								continue;
+							}
+						}
 						$priceinstance['fix'] += $tmpprodchild->price;
 						$priceinstance_ttc['fix'] += $tmpprodchild->price_ttc;
 					}
@@ -335,8 +351,9 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 		$hostname_os  = $contract->array_options['options_hostname_os'];
 		$username_os  = $contract->array_options['options_username_os'];
 		$password_os  = $contract->array_options['options_password_os'];
-		$username_web = $contract->thirdparty->email;
-		$password_web = $contract->thirdparty->array_options['options_password'];
+		// $contract->fetch_thirdparty();
+		//$username_web = $contract->thirdparty->email;
+		//$password_web = $contract->thirdparty->array_options['options_password'];
 		$iphostwebsite = $contract->array_options['options_deployment_host'];
 
 		$websitemodenabled = 0;
@@ -620,6 +637,8 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 
 		$arrayoflines = $contract->lines;
 		//var_dump($arrayoflines);
+		$ispaid = sellyoursaasIsPaidInstance($contract);
+		$freemodeinstance = ((empty($mythirdpartyaccount->array_options['options_checkboxnonprofitorga']) || $mythirdpartyaccount->array_options['options_checkboxnonprofitorga'] == 'nonprofit') && getDolGlobalInt("SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE"));
 
 		// Loop on each service / option enabled
 		foreach ($arrayoflines as $keyline => $line) {
@@ -819,8 +838,33 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 			print '<br>';
 
 			// Hard coded option: Custom domain name
+			// Only one custom domain is actually functional per instance (the server side only
+			// generates a single vhost/certificate per instance), so once one is set this shows
+			// a generic "Uninstall" button (like any other option) instead of the add form again.
 			if (getDolGlobalString("SELLYOURSAAS_ENABLE_CUSTOMURL") && getDolGlobalInt("SELLYOURSAAS_PRODUCT_ID_FOR_CUSTOM_URL") > 0
 				&& (!getDolGlobalString("SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID") || in_array($mythirdpartyaccount->id, explode(',', getDolGlobalString('SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID'))))) {
+				if (! empty($contract->array_options['options_custom_url'])) {
+					// Changing the value is done from the instance's own "Domain" tab, not here -
+					// this panel only ever offers Uninstall, like any other option. A value here may
+					// have been set directly (support, or before this option existed) without ever
+					// going through the deploycustomurl flow, so there may be no contract/facturerec
+					// line for it yet - the uninstall action tolerates that instead of erroring.
+					print '<div class="tagtable centpercent divcustomdomain"><div class="tagtr">';
+					print '<div class="tagtd valignmiddle paddingleft paddingright">';
+					print '<div class="titleoption">';
+					print '<div class="inline-block">';
+					print '<img class="photo photowithmargin" border="0" height="'.$maxHeight.'" src="'.DOL_URL_ROOT.'/theme/common/octicons/build/svg/milestone.svg" title="'.dol_escape_htmltag($alt).'">';
+					print '</div>';
+					print '<div class="inline-block paddingleft marginleftonly paddingright marginrightonly bold">'.$langs->trans("OptionYourCustomDomainName").'</div>';
+					print '</div>';
+					print '<span class="small">'.$langs->trans("YourCustomUrl").' : '.$contract->array_options['options_custom_url'].'</span>';
+					print '</div>';
+					print '<div class="tagtd right valignmiddle minwidth100 width150">';
+					print '<a class="btn btn-warning nowraponall" href="'.$_SERVER["PHP_SELF"].'?mode=instances&action=uninstall&token='.newToken().'&instanceid='.$contract->id.'&productid='.getDolGlobalInt("SELLYOURSAAS_PRODUCT_ID_FOR_CUSTOM_URL").'" rel="noopener">'.$langs->trans("Uninstall").'...</a>';
+					print '</div>';
+					print '</div></div>';	// end tr, end table
+					print '<hr>';
+				} else {
 				print '<div class="tagtable centpercent divcustomdomain"><div class="tagtr">';
 
 				print '<form method="POST" id="formwebsiteoption" action="'.$_SERVER["PHP_SELF"].'">'."\n";
@@ -870,6 +914,7 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 				print '</div></div>';	// end tr, end table
 
 				print '<hr>';
+				}
 			}
 
 			// Hard coded option: A website
@@ -1004,6 +1049,25 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 					continue;
 				}
 
+				$productalreadyininstance = 0;
+				if (!empty($tmpproduct->array_options['options_package'])) {
+					// If there is a package, test if module already deployed on instance
+					foreach ($arrayoflines as $keyline => $line) {
+						if ($tmpproduct->id == $line->fk_product) {
+							$productalreadyininstance = 1;
+							break;
+						}
+					}
+				}
+
+				if (!$productalreadyininstance && !empty($tmpproduct->array_options["options_only_for_country"])) {
+					$optioncountries = preg_split("/[\s,;]+/", $tmpproduct->array_options["options_only_for_country"]);
+					if (!in_array(dol_strtolower($mythirdpartyaccount->country_code), $optioncountries)) {
+						// Thirdparty country code isn't in options_only_for_country array so we don't show option
+						continue;
+					}
+				}
+
 				print '<div class="tagtable centpercent divdolibarroptionfromservices"><div class="tagtr">';
 				print '<div class="tagtd paddingleft paddingright marginrightonly valignmiddle">';
 
@@ -1018,8 +1082,8 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 					print $htmlforphoto;
 				}
 
-				$label = $tmpprod->label;
-				$desc = $tmpprod->description;
+				$label = $tmpproduct->label;
+				$desc = $tmpproduct->description;
 				$producturl = $tmpproduct->url;
 				if (!empty($tmpproduct->multilangs[$langs->defaultlang])) {
 					$label = $tmpproduct->multilangs[$langs->defaultlang]['label'];
@@ -1053,7 +1117,7 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 				}
 				// Button to subscribe
 				if (!empty($tmpproduct->array_options['options_package'])) {
-					// If there is a package, test if module already depoyed on instance
+					// If there is a package, test if module already deployed on instance
 					$productalreadyininstance = 0;
 					foreach ($arrayoflines as $keyline => $line) {
 						if ($tmpproduct->id == $line->fk_product) {
@@ -1064,10 +1128,15 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 					print '<div class="divforbutton">';
 					if (!$productalreadyininstance) {
 						// Show link to subscribe
-						print '<a class="btn btn-primary wordbreak" href="/index.php?mode=instances&action=install&instanceid='.$contract->id.'&productid='.$tmpproduct->id.'&token='.newToken().'" target="_blank" rel="noopener">'.$langs->trans("Install").'...</a><br>';
+						if ($ispaid || $freemodeinstance || getDolGlobalInt("SELLYOURSAAS_ENABLE_OPTION_FOR_TRIAL")) {
+							print '<a class="btn btn-primary nowraponall" href="/index.php?mode=instances&action=install&token='.newToken().'&instanceid='.$contract->id.'&productid='.$tmpproduct->id.'" rel="noopener">'.$langs->trans("Install").'...</a><br>';
+						} else {
+							// Show disabled button if not paying or validated
+							print '<input type="button" class="btn green-haze btn-circle margintop marginbottom marginleft marginright reposition" title="'.$langs->trans("SorryOptionsNotAvailableDuringTestPeriod", $langs->transnoentitiesnoconv("MyBilling")).'..." disabled="disabled" value="'.$langs->trans("Install").'..."><br>';
+						}
 					} else {
 						// Show link to unsubscribe
-						print '<a class="btn btn-warning wordbreak" href="/index.php?mode=instances&action=uninstall&instanceid='.$contract->id.'&productid='.$tmpproduct->id.'&token='.newToken().'#tab_domain_'.$contract->id.'" target="_blank" rel="noopener">'.$langs->trans("Uninstall").'...</a><br>';
+						print '<a class="btn btn-warning nowraponall" href="/index.php?mode=instances&action=uninstall&token='.newToken().'&instanceid='.$contract->id.'&productid='.$tmpproduct->id.'" rel="noopener">'.$langs->trans("Uninstall").'...</a><br>';
 					}
 					print '</div>';
 				} else {
@@ -1143,7 +1212,7 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 			print '<span class="bold">'.$planlabel.'</span>';
 			if ($statuslabel != 'undeployed') {
 				if ($foundtemplate == 0 || ($priceinvoicedht == $contract->total_ht && !$atleastonediscount)) {
-					print ' - <a href="'.$_SERVER["PHP_SELF"].'?mode=instances&action=changeplan&id='.$contract->id.'#contractid'.$contract->id.'">'.$langs->trans("ChangePlan").'</a>';
+					print ' - <a href="'.$_SERVER["PHP_SELF"].'?mode=instances&action=changeplan&token='.newToken().'&id='.$contract->id.'#contractid'.$contract->id.'">'.$langs->trans("ChangePlan").'</a>';
 				}
 			}
 		}
@@ -1196,7 +1265,7 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 						//else print ' - <span style="color: orange">'.$langs->trans("SuspendWillBeDoneSoon").'</span>';
 					}
 					if ($freemodeinstance) {
-						print ' - <a href="'.$_SERVER["PHP_SELF"].'?mode=instances&action=validatefreemode&contractid='.$contract->id.'#contractid'.$contract->id.'">'.$langs->trans("ConfirmInstanceValidation").'</a>';
+						print ' - <a href="'.$_SERVER["PHP_SELF"].'?mode=instances&action=validatefreemode&token='.newToken().'&contractid='.$contract->id.'#contractid'.$contract->id.'">'.$langs->trans("ConfirmInstanceValidation").'</a>';
 					} elseif ($statuslabel == 'suspended') {
 						if (empty($atleastonepaymentmode)) {
 							if ($contract->total_ht > 0) {
@@ -1286,9 +1355,38 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 		print '
 									</div></div>
 
-							  	</form>
-				            </div>
+							  	</form>';
 
+		if (getDolGlobalString("SELLYOURSAAS_ENABLE_CUSTOMURL") && getDolGlobalInt("SELLYOURSAAS_PRODUCT_ID_FOR_CUSTOM_URL") > 0
+			&& (!getDolGlobalString("SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID") || in_array($mythirdpartyaccount->id, explode(',', getDolGlobalString('SELLYOURSAAS_ENABLE_CUSTOMURL_FOR_THIRDPARTYID'))))
+			&& ! empty($contract->array_options['options_custom_url'])) {
+			// Own separate form (can't nest inside the "updateurl" form above): lets the customer
+			// change the already-set custom URL here too, not just from the resources/options tab.
+			// deploycustomurl creates the missing contract/facturerec line itself when needed.
+			print '
+								<form class="form-group" action="'.$_SERVER["PHP_SELF"].'" method="POST" role="form">
+									<input type="hidden" name="token" value="'.newToken().'">
+									<input type="hidden" name="mode" value="instances"/>
+									<input type="hidden" name="action" value="deploycustomurl" />
+									<input type="hidden" name="contractid" value="'.$contract->id.'" />
+									<input type="hidden" name="tab" value="domain_'.$contract->id.'" />
+									<div class="form-body">
+										<div class="form-group col-md-12 row">
+											<label class="col-md-5 control-label">'.$langs->trans("YourCustomUrl").'</label>
+											<div class="col-md-5">
+												<input type="text" name="domainname" class="minwidth300" value="'.dol_escape_htmltag($contract->array_options['options_custom_url']).'">
+												<input type="submit" class="btn btn-primary button-small" name="activateoption" value="'.$langs->trans("Modify").'">
+											</div>
+										</div>
+									</div>
+								</form>';
+		}
+
+		print '
+				            </div>';
+
+		// Tab for SSH/SFTP
+		print '
 							<!-- tab ssh/sftp -->
 				            <div class="tab-pane" id="tab_ssh_'.$contract->id.'">
 				                <p class="opacitymedium" style="padding: 15px">'.$langs->trans("SSHFTPDesc");
@@ -1358,7 +1456,10 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 		}
 
 		print '
-				              </div> <!-- END TAB SSH PANE -->
+				              </div> <!-- END TAB SSH PANE -->';
+
+		// Tab for DB access
+		print '
 
 							  <!-- tab db -->
 				              <div class="tab-pane" id="tab_db_'.$contract->id.'">
@@ -1473,32 +1574,47 @@ if (count($listofcontractid) == 0) {				// If all contracts were removed
 				}
 			}
 		}
-		print '				<!-- tab upgrade -->
-							<div class="tab-pane" id="tab_upgrade_'.$contract->id.'">';
-		if ($lastversiondolibarrinstance < $newversiondolibarr) {
-		print '				<form class="form-upgrade" action="'.$_SERVER["PHP_SELF"].'" method="POST">
-							<input type="hidden" name="token" value="'.newToken().'">
-							<input type="hidden" name="mode" value="autoupgrade">
-							<input type="hidden" name="backtopagesupport" value="'.$_SERVER["PHP_SELF"].'?mode=instances">
-							<input type="hidden" name="instanceselect" value="'.$priority.'_'.$contract->id.'">
-							<p class="opacitymediumbis" style="padding: 15px">
-								'.$langs->trans("NewerVersionAvailable", $lastversiondolibarrinstance, $newversiondolibarr).'
-							</p>
-							<p class="center" style="padding-bottom: 15px">
-								<input type="submit" class="btn" name="undeploy" value="'.$langs->trans("Upgrade").'">
-							</p>
-							</form>';
-		}else {
-			print '			<p class="opacitymediumbis" style="padding: 15px">
-								'.$langs->trans("AlreadyToLastVersionUpgrade", $newversiondolibarr).'
-							</p>
-			';
+
+		// Get the URL for support
+		$sellyoursaassupporturl = getDolGlobalString('SELLYOURSAAS_SUPPORT_URL');
+		if (! empty($mythirdpartyaccount->array_options['options_domain_registration_page'])
+			&& $mythirdpartyaccount->array_options['options_domain_registration_page'] != getDolGlobalString('SELLYOURSAAS_MAIN_DOMAIN_NAME')) {
+			$newnamekey = 'SELLYOURSAAS_SUPPORT_URL_'.strtoupper(str_replace('.', '_', $mythirdpartyaccount->array_options['options_domain_registration_page']));
+			if (getDolGlobalString($newnamekey)) {
+				$sellyoursaassupporturl = getDolGlobalString($newnamekey);
+			}
 		}
 
-		print '				</div>
-							<!-- END tab upgrade -->
-';
-print '						<!-- tab destroy -->
+		// Tab for upgrade
+		if (empty($sellyoursaassupporturl)) {
+			print '				<!-- tab upgrade -->
+								<div class="tab-pane" id="tab_upgrade_'.$contract->id.'">';
+			if ($lastversiondolibarrinstance < $newversiondolibarr) {
+				print '				<form class="form-upgrade" action="'.$_SERVER["PHP_SELF"].'" method="POST">
+								<input type="hidden" name="token" value="'.newToken().'">
+								<input type="hidden" name="mode" value="autoupgrade">
+								<input type="hidden" name="backtopagesupport" value="'.$_SERVER["PHP_SELF"].'?mode=instances">
+								<input type="hidden" name="instanceselect" value="'.$priority.'_'.$contract->id.'">
+								<p class="opacitymediumbis" style="padding: 15px">
+									'.$langs->trans("NewerVersionAvailable", $lastversiondolibarrinstance, $newversiondolibarr).'
+								</p>
+								<p class="center" style="padding-bottom: 15px">
+									<input type="submit" class="btn" name="undeploy" value="'.$langs->trans("Upgrade").'">
+								</p>
+								</form>';
+			} else {
+				print '			<p class="opacitymediumbis" style="padding: 15px">
+									'.$langs->trans("AlreadyToLastVersionUpgrade", $newversiondolibarr).'
+								</p>';
+			}
+
+			print "\n".'				</div>
+								<!-- END tab upgrade -->';
+		}
+
+		// Tab de destroy/cancel instance
+		print '
+							<!-- tab destroy -->
 				            <div class="tab-pane" id="tab_danger_'.$contract->id.'">
 
 							<form class="form-group" action="'.$_SERVER["PHP_SELF"].'" method="POST">
@@ -2055,18 +2171,16 @@ if ($MAXINSTANCESPERACCOUNT && count($listofcontractidopen) < $MAXINSTANCESPERAC
 
 						/* Now disable according to restrict_domains */
 						console.log("Now, disable servers according to restrict_domains");'."\n";
-						foreach ($arrayofplansfull as $key => $tmpplan) {
-							if (!empty($tmpplan['restrict_domains'])) {
-								$restrict_domains = explode(",", $tmpplan['restrict_domains']);
-								print "/* Code if we select pid = ".$key." so plan = ".$tmpplan['label']." with restrict_domains = ".$tmpplan['restrict_domains']." */\n";
-								foreach ($restrict_domains as $domain) {
-									print " if (pid == ".$key.") { disable_tld_if_not('".trim($domain)."'); }\n";
-									break;	// We keep only the first domain in list as the domain to keep possible for deployment
-								}
-							} else {
-								print '	/* No restriction for pid = '.$key.', currentdomain is '.$domainname." */\n";
-							}
-						}
+		foreach ($arrayofplansfull as $key => $tmpplan) {
+			if (!empty($tmpplan['restrict_domains'])) {
+				$restrict_domains = explode(",", $tmpplan['restrict_domains']);
+				$restrict_domains = array_map('trim', $restrict_domains);
+				print "/* Code if we select pid = ".$key." so plan = ".$tmpplan['label']." with restrict_domains = ".$tmpplan['restrict_domains']." */\n";
+				print " if (pid == ".$key.") { disable_tld_if_not('".implode(',', $restrict_domains)."'); }\n";
+			} else {
+				print '	/* No restriction for pid = '.$key.', currentdomain is '.$domainname." */\n";
+			}
+		}
 		print '
 
 						/* Now disable according to onlyserver */
@@ -2144,8 +2258,14 @@ if ($MAXINSTANCESPERACCOUNT && count($listofcontractidopen) < $MAXINSTANCESPERAC
 
 					function disable_tld_if_not(s) {
 						console.log("Disable combo choice except if s="+s);
+						var allowedDomains = s.split(",");
 						$("#tldid > option").each(function() {
-							if (this.value && !this.value.endsWith(s)) {
+							if (!this.value) {
+								return;
+							}
+							var optionValue = this.value;
+							var matched = allowedDomains.some(function(d) { return optionValue.endsWith(d); });
+							if (!matched) {
 								console.log("We disable the option "+this.value);
 								$(this).attr("disabled", "disabled");
 								$(this).removeAttr("selected");

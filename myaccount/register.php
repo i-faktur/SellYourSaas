@@ -46,7 +46,6 @@ define('SYSLOG_FILE_ADDSUFFIX', 'register');
 
 // Add specific definition to allow a dedicated session management
 include './mainmyaccount.inc.php';
-
 /**
  * @var Database	$db
  * @var Conf		$conf
@@ -61,7 +60,7 @@ $res=0;
 if (! $res && ! empty($_SERVER["CONTEXT_DOCUMENT_ROOT"])) {
 	$res=@include $_SERVER["CONTEXT_DOCUMENT_ROOT"]."/main.inc.php";
 }
-// Try main.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try main.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -132,6 +131,8 @@ $domainname = getDomainFromURL($_SERVER["SERVER_NAME"], 1);
 
 $productid = GETPOST('service', 'int');
 $productref = (GETPOST('productref', 'alpha') ? GETPOST('productref', 'alpha') : '');
+
+dol_syslog("register.php: productid=".$productid." productref=".$productref." plan=".$plan." sldAndSubdomain=".$sldAndSubdomain." tldid=".$tldid." partner=".$partner." partnerkey=".$partnerkey." domainname=".$domainname);
 
 $defaultproduct = '';
 
@@ -229,13 +230,25 @@ if ($partner) {
 }
 
 
+// This public page must not disclose data of a thirdparty or contract that is not the one of the logged customer.
+$socidinsession = empty($_SESSION['dol_loginsellyoursaas']) ? 0 : (int) $_SESSION['dol_loginsellyoursaas'];
+if ($socid > 0 && $socid != $socidinsession) {
+	$socid = 0;
+}
+
 if ($reusecontractid) {
 	$contract = new Contrat($db);
 	$contract->fetch($reusecontractid);
-	$socid = ($contract->socid > 0 ? $contract->socid : $contract->fk_soc);
-	$tmparray=explode('.', $contract->ref_customer, 2);
-	$sldAndSubdomain=strtolower($tmparray[0]);
-	$tldid='.'.$tmparray[1];
+	$socidofcontract = ($contract->socid > 0 ? $contract->socid : $contract->fk_soc);
+	if ($socidinsession > 0 && $socidofcontract == $socidinsession) {
+		$socid = $socidofcontract;
+		$tmparray=explode('.', $contract->ref_customer, 2);
+		$sldAndSubdomain=strtolower($tmparray[0]);
+		$tldid='.'.(isset($tmparray[1]) ? $tmparray[1] : '');
+	} else {
+		dol_syslog("register.php: reusecontractid=".$reusecontractid." ignored, contract not owned by thirdparty in session", LOG_WARNING);
+		$reusecontractid = 0;
+	}
 }
 
 $mythirdparty = new Societe($db);
@@ -413,13 +426,13 @@ if ($reshook == 0) {
 				if (is_readable($conf->mycompany->dir_output.'/logos/thumbs/' . getDolGlobalString($constlogosmall))) {
 					$linklogo=DOL_URL_ROOT.'/viewimage.php?cache=1&modulepart=mycompany&file='.urlencode('logos/thumbs/' . getDolGlobalString($constlogosmall));
 				}
-			} elseif (empty($urllogo) && getDolGlobalString($constlogo)) {
+			} elseif (empty($linklogo) && getDolGlobalString($constlogo)) {
 				if (is_readable($conf->mycompany->dir_output.'/logos/' . getDolGlobalString($constlogo))) {
 					$linklogo=DOL_URL_ROOT.'/viewimage.php?cache=1&modulepart=mycompany&file='.urlencode('logos/' . getDolGlobalString($constlogo));
 				}
-			} elseif (empty($urllogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/'.$conf->theme.'/img/dolibarr_logo.png')) {
+			} elseif (empty($linklogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/'.$conf->theme.'/img/dolibarr_logo.png')) {
 				$linklogo=DOL_URL_ROOT.'/theme/'.$conf->theme.'/img/dolibarr_logo.png';
-			} elseif (empty($urllogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/dolibarr_logo.png')) {
+			} elseif (empty($linklogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/dolibarr_logo.png')) {
 				$linklogo=DOL_URL_ROOT.'/theme/dolibarr_logo.png';
 			} else {
 				$linklogo=DOL_URL_ROOT.'/theme/login_logo.png';
@@ -540,11 +553,11 @@ if ($reshook == 0) {
 			  <input type="hidden" name="reusecontractid" value="<?php echo dol_escape_htmltag($reusecontractid); ?>" />
 			  <input type="hidden" name="fromsocid" value="<?php echo dol_escape_htmltag($fromsocid); ?>" />
 
-			  <input type="hidden" name="origin" value="<?php echo dol_escape_htmltag($origin); ?>" /><!-- wil be saved into options_source -->
+			  <input type="hidden" name="origin" value="<?php echo dol_escape_htmltag($origin); ?>" /><!-- will be saved into options_source -->
 			  <!-- the utm_source_cookie=<?php echo dol_escape_htmltag(empty($_COOKIE["utm_source_cookie"]) ? '' : $_COOKIE["utm_source_cookie"]); ?> will be saved into options_source_utm -->
 
 			  <input type="hidden" name="disablecustomeremail" value="<?php echo dol_escape_htmltag($disablecustomeremail); ?>" />
-			  <!-- _SESSION['dol_loginsellyoursaas'] = <?php echo(empty($_SESSION['dol_loginsellyoursaas']) ? '' : $_SESSION['dol_loginsellyoursaas']); ?> -->
+			  <!-- _SESSION['dol_loginsellyoursaas'] = <?php echo (empty($_SESSION['dol_loginsellyoursaas']) ? '' : $_SESSION['dol_loginsellyoursaas']); ?> -->
 
 			<?php
 			if ($productref == 'array') {
@@ -654,9 +667,9 @@ if ($reshook == 0) {
 
 						';
 
-						if (getDolGlobalString('SELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL')) {
-							print ' jQuery("#tldid").val("");';
-						}
+				if (getDolGlobalString('SELLYOURSAAS_FORCE_NO_SELECTION_IF_SEVERAL')) {
+					print ' jQuery("#tldid").val("");';
+				}
 
 						print '
 
@@ -747,7 +760,7 @@ if ($reshook == 0) {
 				<?php if (!getDolGlobalInt('SELLYOURSAAS_REGISTER_HIDE_PHONE')) { ?>
 				<div class="horizontal-fld">
 					<div class='control-group'>
-						<label class='control-label' for='phone' spellcheck="false" trans='1'><span class="fa fa-phone opacityhigh"></span> <?php echo $langs->trans('Phone') ?></label>
+						<label class='control-label' for='phone' spellcheck="false" trans='1'><span class="fa fa-phone opacityhigh"></span> <span class="opacitymedium nobold"><?php echo $langs->trans('Phone') ?></span></label>
 						<div class="controls">
 							<input type="text"<?php echo $disabled; ?> name="phone" maxlength="250"
 								   value="<?php echo GETPOST('phone', 'alpha'); ?>" id="phone"/>
@@ -797,7 +810,31 @@ if ($reshook == 0) {
 				<?php
 			}
 
-
+			global $db, $extrafields;
+			$extrafields->fetch_name_optionals_label('societe');
+			$numActiveEntries = 0;
+			$sql = "SELECT COUNT(rowid) as nb FROM " . $db->prefix() . "c_sellyoursaas_source_choice WHERE active = 1";
+			$resql = $db->query($sql);
+			if ($resql) {
+				$obj = $db->fetch_object($resql);
+				if ($obj) {
+					$numActiveEntries = (int) $obj->nb;
+				}
+			}
+			if ($numActiveEntries > 0) {
+				?>
+				<div class="control-group-select2 control-group required">
+					<label class="control-label-select2" for="options_sellyoursaas_source_choice">
+						<span class="fa fa-question-circle opacityhigh"></span> <?php echo $langs->trans("HowDidYouHearAboutUs") ?>
+					</label>
+					<div class="controls-select2">
+						<?php
+						print $extrafields->showInputField('source_choice', '', '', '', '', '', 0, 'societe');
+						?>
+					</div>
+				</div>
+				<?php
+			}
 			if (empty($mythirdparty->id)) {
 				?>
 
@@ -831,7 +868,7 @@ if ($reshook == 0) {
 				} else {
 					print '<hr>';
 				}
-			?>
+				?>
 
 			  <!-- Selection of domain to create instance -->
 			  <section id="selectDomain">
@@ -909,7 +946,7 @@ if ($reshook == 0) {
 							// If $tmppackage is defined, check if there is a restriction on some domains for this package (if not, $tmppackage->restrict_domains is empty and no restriction is done here)
 							if (! empty($tmppackage->restrict_domains)) {
 								$restrictfound = false;
-								$tmparray=explode(',', $tmppackage->restrict_domains);
+								$tmparray=array_map('trim', explode(',', $tmppackage->restrict_domains));
 								foreach ($tmparray as $tmprestrictdomain) {
 									$newdomain = getDomainFromURL($newval, 1);
 									if ($newdomain == $tmprestrictdomain) {
@@ -929,7 +966,7 @@ if ($reshook == 0) {
 								// Check if domain is allowed by $productref
 								$arrayofonlyserver = explode(',', $productonlyserver);
 								$qualifiedbyonlyserver = false;
-								foreach($arrayofonlyserver as $onlyserver) {
+								foreach ($arrayofonlyserver as $onlyserver) {
 									//var_dump($onlyserver.' '.$newval);
 									if (preg_match('/'.$onlyserver.'/', $newval)) {
 										$qualifiedbyonlyserver = 1;
@@ -1061,7 +1098,7 @@ if ($reshook == 0) {
 
 
 			<?php if (getDolGlobalInt('SELLYOURSAAS_ENABLE_OPTINMESSAGES')) { ?>
-			<!-- checkbox for optin messages -->
+			<!-- checkbox for opt-in messages -->
 			<section id="optinmessagesid">
 				<input type="checkbox" id="optinmessages" name="optinmessages" class="valignmiddle inline" style="margin-top: 0" value="1">
 				<label for="optinmessages" class="valignmiddle small inline opacitymedium"><?php echo $langs->trans("OptinForCommercialMessagesOnMyAccount", $sellyoursaasname); ?></label>
@@ -1137,7 +1174,6 @@ if ($reshook == 0) {
 
 				if ($productref == 'array') {
 					$disabled = ' disabled="disabled" title="'.$langs->trans("ChooseAProductForYourApplication").'"';
-
 				}
 
 				if ($productref != 'none') {
@@ -1171,7 +1207,7 @@ if ($reshook == 0) {
 
 	<?php
 	// Execute hook getRegisterPageFooter
-	$parameters = array('domainname' => $domainname, 'defaultproduct' => $defaultproduct, 'tmpproduct' => $tmpproduct);
+	$parameters = array('domainname' => $domainname, 'defaultproduct' => $defaultproduct, 'tmpproduct' => $tmpproduct, 'extcss' => $extcss);
 	$reshook = $hookmanager->executeHooks('getRegisterPageFooter', $parameters); // Note that $action and $object may have been modified by some hooks.
 	print $hookmanager->resPrint;
 	?>

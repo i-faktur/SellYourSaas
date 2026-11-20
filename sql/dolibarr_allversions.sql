@@ -38,16 +38,17 @@
 ALTER TABLE llx_packages ADD COLUMN cliafterpaid text;
 ALTER TABLE llx_packages ADD COLUMN sqlafterpaid text;
 ALTER TABLE llx_packages ADD COLUMN sqlpasswordreset text;
+ALTER TABLE llx_packages ADD COLUMN sqlafterundeployoption text;
 
 
 
 CREATE TABLE llx_sellyoursaas_blacklistcontent(
 	-- BEGIN MODULEBUILDER FIELDS
-	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL, 
-	entity integer DEFAULT 1 NOT NULL, 
-	content varchar(128) NOT NULL, 
-	date_creation datetime NOT NULL, 
-	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	entity integer DEFAULT 1 NOT NULL,
+	content varchar(128) NOT NULL,
+	date_creation datetime NOT NULL,
+	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	status integer DEFAULT 1 NOT NULL
 	-- END MODULEBUILDER FIELDS
 ) ENGINE=innodb;
@@ -55,11 +56,11 @@ CREATE TABLE llx_sellyoursaas_blacklistcontent(
 
 CREATE TABLE llx_sellyoursaas_blacklistfrom(
 	-- BEGIN MODULEBUILDER FIELDS
-	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL, 
-	entity integer DEFAULT 1 NOT NULL, 
-	content varchar(128) NOT NULL, 
-	date_creation datetime NOT NULL, 
-	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	entity integer DEFAULT 1 NOT NULL,
+	content varchar(128) NOT NULL,
+	date_creation datetime NOT NULL,
+	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	status integer DEFAULT 1 NOT NULL
 	-- END MODULEBUILDER FIELDS
 ) ENGINE=innodb;
@@ -68,36 +69,26 @@ CREATE TABLE llx_sellyoursaas_blacklistfrom(
 
 CREATE TABLE llx_sellyoursaas_blacklistip(
 	-- BEGIN MODULEBUILDER FIELDS
-	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL, 
-	entity integer DEFAULT 1 NOT NULL, 
-	content varchar(128) NOT NULL, 
-	date_creation datetime NOT NULL, 
-	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	entity integer DEFAULT 1 NOT NULL,
+	content varchar(128) NOT NULL,
+	date_creation datetime NOT NULL,
+	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	status integer DEFAULT 1 NOT NULL
 	-- END MODULEBUILDER FIELDS
 ) ENGINE=innodb;
 
 
 
-CREATE TABLE llx_sellyoursaas_blacklistmail(
-	-- BEGIN MODULEBUILDER FIELDS
-	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL, 
-	entity integer DEFAULT 1 NOT NULL, 
-	content text NOT NULL, 
-	date_creation datetime NOT NULL, 
-	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
-	status integer DEFAULT 1 NOT NULL
-	-- END MODULEBUILDER FIELDS
-) ENGINE=innodb;
 
 
 CREATE TABLE llx_sellyoursaas_blacklistto(
 	-- BEGIN MODULEBUILDER FIELDS
-	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL, 
-	entity integer DEFAULT 1 NOT NULL, 
-	content varchar(128) NOT NULL, 
-	date_creation datetime NOT NULL, 
-	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	entity integer DEFAULT 1 NOT NULL,
+	content varchar(128) NOT NULL,
+	date_creation datetime NOT NULL,
+	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	status integer DEFAULT 1 NOT NULL
 	-- END MODULEBUILDER FIELDS
 ) ENGINE=innodb;
@@ -106,12 +97,12 @@ CREATE TABLE llx_sellyoursaas_blacklistto(
 
 CREATE TABLE llx_sellyoursaas_blacklistdir(
 	-- BEGIN MODULEBUILDER FIELDS
-	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL, 
-	entity integer DEFAULT 1 NOT NULL, 
-	content varchar(128) NOT NULL, 
-	noblacklistif varchar(255), 
-	date_creation datetime NOT NULL, 
-	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	entity integer DEFAULT 1 NOT NULL,
+	content varchar(128) NOT NULL,
+	noblacklistif varchar(255),
+	date_creation datetime NOT NULL,
+	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	status integer DEFAULT 1 NOT NULL
 	-- END MODULEBUILDER FIELDS
 ) ENGINE=innodb;
@@ -123,7 +114,7 @@ CREATE TABLE llx_sellyoursaas_deploymentserver(
 	hostname varchar(64),
 	label varchar(64),
 	entity integer DEFAULT 1 NOT NULL,  -- multi company id
-	note_private text, 
+	note_private text,
 	note_public text,
 	date_creation datetime NOT NULL,
 	date_modification timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -143,12 +134,12 @@ CREATE TABLE llx_sellyoursaas_deploymentserver(
 
 CREATE TABLE llx_sellyoursaas_whitelistemail(
 	-- BEGIN MODULEBUILDER FIELDS
-	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL, 
-	entity integer DEFAULT 1 NOT NULL, 
-	content varchar(128) NOT NULL, 
+	rowid integer AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	entity integer DEFAULT 1 NOT NULL,
+	content varchar(128) NOT NULL,
 	comment varchar(255) NULL,
-	date_creation datetime NOT NULL, 
-	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+	date_creation datetime NOT NULL,
+	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	status integer DEFAULT 1 NOT NULL
 	-- END MODULEBUILDER FIELDS
 ) ENGINE=innodb;
@@ -170,7 +161,6 @@ ALTER TABLE llx_sellyoursaas_blacklistip DROP INDEX idx_sellyoursaas_blacklistip
 ALTER TABLE llx_sellyoursaas_whitelistip DROP INDEX idx_sellyoursaas_whitelistip_content;
 
 ALTER TABLE llx_sellyoursaas_blacklistcontent ADD INDEX idx_sellyoursaas_blacklistcontent_date_creation (date_creation);
-ALTER TABLE llx_sellyoursaas_blacklistmail ADD INDEX idx_sellyoursaas_blacklistmail_date_creation (date_creation);
 
 ALTER TABLE llx_sellyoursaas_blacklistdir ADD UNIQUE INDEX uk_sellyoursaas_blacklistdir_content (content);
 ALTER TABLE llx_sellyoursaas_blacklistto ADD UNIQUE INDEX uk_sellyoursaas_blacklistto_content (content);
@@ -192,12 +182,23 @@ ALTER TABLE llx_sellyoursaas_deploymentserver ADD COLUMN hostname varchar(64);
 UPDATE llx_actioncomm SET code = 'AC_PAYMENT_STRIPE_IPN_SEPA_KO' where code = 'AC_IPN' and label like 'Payment error (SEPA%';
 
 
-UPDATE llx_facture SET dispute_status = 1 WHERE rowid IN (SELECT fe.fk_object FROM llx_facture_extrafields as fe WHERE fe.invoicepaymentdisputed = 1);
+--UPDATE llx_facture SET dispute_status = 1 WHERE rowid IN (SELECT fe.fk_object FROM llx_facture_extrafields as fe WHERE fe.invoicepaymentdisputed = 1) AND dispute_status = 0;
 --UPDATE llx_facture_extrafields SET invoicepaymentdisputed = NULL WHERE invoicepaymentdisputed = 1;
 
 
 update llx_societe_rib set ext_payment_site = 'StripeLive' where stripe_account like '%pk_live%' AND ext_payment_site IS NULL;
 update llx_societe_rib set ext_payment_site = 'StripeTest' where stripe_account like '%pk_test%' AND ext_payment_site IS NULL;
 
-update llx_societe_rib set ext_payment_site = 'StripeLive' where type = 'card' AND card_type IN ('visa', 'mastercard', 'amex') AND ext_payment_site IS NULL AND (stripe_card_ref like 'card_%' OR stripe_card_ref LIKE 'pm%')
+update llx_societe_rib set ext_payment_site = 'StripeLive' where type = 'card' AND card_type IN ('visa', 'mastercard', 'amex') AND ext_payment_site IS NULL AND (stripe_card_ref like 'card_%' OR stripe_card_ref LIKE 'pm%');
 
+ALTER TABLE llx_packages ADD COLUMN sqlafterundeployoption text;
+
+UPDATE llx_extrafields SET enabled = 'isModEnabled("sellyoursaas")' WHERE enabled = '$conf->sellyoursaas->enabled';
+ALTER TABLE llx_packages ADD COLUMN cliafterdeployoption text;
+
+ALTER TABLE llx_packages ADD COLUMN otherinformations_formula text;
+ALTER TABLE llx_packages ADD COLUMN sqltoupdateeinvoiceconst text;
+
+-- Remove duplicated rows with same code into llx_c_sellyoursaas_source_choice (keep the most recent row, so with the label matching the latest data.sql) before adding the unique index
+DELETE FROM llx_c_sellyoursaas_source_choice WHERE rowid NOT IN (SELECT keep.rid FROM (SELECT MAX(rowid) AS rid FROM llx_c_sellyoursaas_source_choice GROUP BY code) AS keep);
+ALTER TABLE llx_c_sellyoursaas_source_choice ADD UNIQUE INDEX uk_c_sellyoursaas_source_choice_code (code);

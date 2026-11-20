@@ -16,10 +16,23 @@
  */
 
 // Need global variable to be defined by caller (like dol_loginfunction)
-// $title
 // $urllogo
 // $focus_element
+// $captcha_refresh
 // Caller can also set 	$morelogincontent = array(['options']=>array('js'=>..., 'table'=>...);
+
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ *
+ * @var Societe $mythirdparty
+ * @var Societe $partnerthirdparty
+ * @var string $partner
+ * @var string $partnerkey
+ * @var string $title
+ */
 
 // Protection to avoid direct call of template
 if (empty($conf) || ! is_object($conf)) {
@@ -157,16 +170,16 @@ if (empty($linklogo)) {               // Show main logo of Cloud service
 		if (is_readable($conf->mycompany->dir_output.'/logos/thumbs/' . getDolGlobalString($constlogosmall))) {
 			$linklogo=DOL_URL_ROOT.'/viewimage.php?cache=1&modulepart=mycompany&file='.urlencode('logos/thumbs/' . getDolGlobalString($constlogosmall));
 		}
-	} elseif (empty($urllogo) && getDolGlobalString($constlogo)) {
+	} elseif (empty($linklogo) && getDolGlobalString($constlogo)) {
 		if (is_readable($conf->mycompany->dir_output.'/logos/' . getDolGlobalString($constlogo))) {
 			$linklogo=DOL_URL_ROOT.'/viewimage.php?cache=1&modulepart=mycompany&file='.urlencode('logos/' . getDolGlobalString($constlogo));
 		}
-	} elseif (empty($urllogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/'.$conf->theme.'/img/dolibarr_logo.png')) {
+	} elseif (empty($linklogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/'.$conf->theme.'/img/dolibarr_logo.png')) {
 		$linklogo=DOL_URL_ROOT.'/theme/'.$conf->theme.'/img/dolibarr_logo.png';
-	} elseif (empty($urllogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/dolibarr_logo.png')) {
+	} elseif (empty($linklogo) && is_readable(DOL_DOCUMENT_ROOT.'/theme/dolibarr_logo.png')) {
 		$linklogo=DOL_URL_ROOT.'/theme/dolibarr_logo.png';
 	} else {
-		$linklogo=DOL_URL_ROOT.'/theme/login_logo.png';
+		$linklogo=DOL_URL_ROOT.'/theme/common/login_logo.png';
 	}
 }
 
@@ -176,7 +189,7 @@ if (!GETPOSTINT('noheader')) {
 	<div class="container">
 	  <div class="registerheader" style="display:flex; justify-content:space-between;">
 		  <div class="valignmiddle" style="padding-right: 25px;">
-		  <a href="<?php echo $homepage ?>"><img class="logoheader"  src="<?php echo $linklogo; ?>" id="logo" /></a><br>
+		  <a href="<?php echo $homepage ?>"><img class="logoheader" src="<?php echo $linklogo; ?>" id="logo" /></a><br>
 		  </div>
 		  <?php if (empty($mythirdparty->id)) {	?>
 		  <div class="paddingtop20" style="float: right;">
@@ -207,6 +220,21 @@ if (!GETPOSTINT('noheader')) {
 </div>
 	<?php
 }
+
+
+// Test if dashboard is allowed or not
+if (getDolGlobalString('SELLYOURSAAS_DASHBOARD_OFF')) {
+	print '<center><div class="warning"><br><br><br>';
+	print $langs->trans("DashboardServiceIsTemporarlyOffline");
+	print '<br>';
+	print $langs->trans("PleaseGoBackInFewHours");
+	print '<br><br><br></div></center>';
+
+	print '</body>';
+	print '</html>';
+	exit;
+}
+
 ?>
 
 
@@ -234,6 +262,11 @@ if (!GETPOSTINT('noheader')) {
 <input type="hidden" name="dol_no_mouse_hover" id="dol_no_mouse_hover" value="<?php echo $dol_no_mouse_hover; ?>">
 <input type="hidden" name="dol_use_jmobile" id="dol_use_jmobile" value="<?php echo $dol_use_jmobile; ?>">
 
+<header class="register2">
+			<div class="customregisterheader2">
+				<h1><?php echo dol_escape_htmltag($title); ?></h1>
+			</div>
+</header>
 
 <div class="signup">
 
@@ -264,12 +297,11 @@ if (getDolGlobalString('SELLYOURSAAS_ANNOUNCE_ON') && getDolGlobalString('SELLYO
 }
 ?>
 
-<div class="block medium">
+<div class="block medium center signup2">
 
-		<header class="inverse">
-		  <h1><?php echo dol_escape_htmltag($title); ?></h1>
-		  <span class="opacitymedium" style="font-size: 0.85em; margin-top: 4px; line-height: 1;"><?php echo $langs->trans("MyAcountDesc", $homepage, $sellyoursaasname); ?></span>
-		</header>
+	<span class="opacitymedium inline-block justify" style="display: inline-block; font-size: 0.85em; padding-left: 20px; padding-right: 20px; margin-top: 4px; margin-bottom: 40px; line-height: 1.5em;">
+	<?php echo $langs->trans("MyAcountDesc", $homepage, $sellyoursaasname); ?>
+	</span>
 
 
 <div class="login_table">
@@ -279,17 +311,21 @@ if (getDolGlobalString('SELLYOURSAAS_ANNOUNCE_ON') && getDolGlobalString('SELLYO
 <div id="login_right">
 
 <table class="left centpercent" title="<?php echo $langs->trans("EnterLoginDetail"); ?>">
+<?php
+$sellyoursaas2fapending = !empty($_SESSION['sellyoursaas_2fa_pending_socid']);
+?>
+<?php if (empty($sellyoursaas2fapending)) { ?>
 <!-- Login -->
 <tr>
 <td class="nowrap center valignmiddle">
-<?php
-if (getDolGlobalString('MAIN_OPTIMIZEFORTEXTBROWSER')) {
-	?><label for="username" class="hidden"><?php echo $langs->trans("Login"); ?></label><?php
-}
-if (GETPOST('usernamebis', 'alpha')) {
-	$login=GETPOST('usernamebis', 'alpha');
-}
-?>
+	<?php
+	if (getDolGlobalString('MAIN_OPTIMIZEFORTEXTBROWSER')) {
+		?><label for="username" class="hidden"><?php echo $langs->trans("Login"); ?></label><?php
+	}
+	if (GETPOST('usernamebis', 'alpha')) {
+		$login=GETPOST('usernamebis', 'alpha');
+	}
+	?>
 <span class="span-icon-user fa fa-user">
 <input type="email" id="username" maxlength="255" placeholder="<?php echo $langs->trans("LoginEmail"); ?>" name="username" class="flat input-field input-icon-user" value="<?php echo dol_escape_htmltag($login); ?>" tabindex="1" autofocus="autofocus" />
 </span>
@@ -299,12 +335,31 @@ if (GETPOST('usernamebis', 'alpha')) {
 <tr>
 <td class="nowrap center valignmiddle">
 <br>
-<?php if (getDolGlobalString('MAIN_OPTIMIZEFORTEXTBROWSER')) { ?><label for="password" class="hidden"><?php echo $langs->trans("Password"); ?></label><?php } ?>
+	<?php if (getDolGlobalString('MAIN_OPTIMIZEFORTEXTBROWSER')) { ?><label for="password" class="hidden"><?php echo $langs->trans("Password"); ?></label><?php } ?>
 <span class="span-icon-password fa fa-lock">
 <input type="password" id="password" maxlength="128" placeholder="<?php echo $langs->trans("Password"); ?>" name="password" class="flat input-field input-icon-password" value="<?php echo dol_escape_htmltag($password); ?>" tabindex="2" autocomplete="<?php echo getDolGlobalString('MAIN_LOGIN_ENABLE_PASSWORD_AUTOCOMPLETE') ? 'on' : 'off'; ?>" />
 </span>
 <br>
 </td></tr>
+<?php } else { ?>
+<input type="hidden" id="username" name="username" value="<?php echo dol_escape_htmltag($login); ?>" />
+<input type="hidden" id="password" name="password" value="<?php echo dol_escape_htmltag($password); ?>" />
+<!-- Second factor: entirely provided by whichever module implements the
+	 'mainmyaccountloginpage' hook context's printSecondFactorFields method
+	 (e.g. twofactorauth) - this template has no knowledge of TOTP/WebAuthn
+	 or any other specific mechanism. -->
+	<?php
+	global $hookmanager;
+	if (!is_object($hookmanager)) {
+		include_once DOL_DOCUMENT_ROOT.'/core/class/hookmanager.class.php';
+		$hookmanager = new HookManager($db);
+	}
+
+	$parameters = array('socid' => (int) $_SESSION['sellyoursaas_2fa_pending_socid'], 'mainmyaccountloginpage' => 1);
+	$hookmanager->executeHooks('printSecondFactorFields', $parameters);
+	echo $hookmanager->resPrint;
+	?>
+<?php } ?>
 <?php
 /*
 if (! empty($morelogincontent)) {

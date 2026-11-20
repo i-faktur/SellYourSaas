@@ -25,6 +25,7 @@
 if (!defined('NOTOKENRENEWAL')) {
 	define('NOTOKENRENEWAL', '1'); // Disables token renewal
 }
+// If there is no need to load and show top and left menu
 if (!defined('NOREQUIREMENU')) {
 	define('NOREQUIREMENU', '1');
 }
@@ -37,10 +38,13 @@ if (!defined('NOREQUIREAJAX')) {
 if (!defined('NOREQUIRESOC')) {
 	define('NOREQUIRESOC', '1');
 }
-// If there is no need to load and show top and left menu
-if (!defined("NOLOGIN")) {
-	define("NOLOGIN", '1');
+if (!defined('NOIPCHECK')) {
+	define('NOIPCHECK', '1'); // Do not check IP defined into conf $dolibarr_main_restrict_ip
 }
+if (!defined('NOBROWSERNOTIF')) {
+	define('NOBROWSERNOTIF', '1');
+}
+// This page must be called by a logged customer only (see the check on $_SESSION['dol_loginsellyoursaas'] below)
 //if (! defined('NOREQUIRETRAN'))  define('NOREQUIRETRAN','1');    // Required to know date format for dol_print_date
 
 // Load Dolibarr environment
@@ -90,13 +94,31 @@ $action = GETPOST('action', 'aZ09');
 $module = GETPOST('module', 'aZ09arobase');
 $uploaddirname = dol_sanitizeFileName(GETPOST('uploaddirname', 'alpha'));
 
-$flowFilename = GETPOST('flowFilename', 'alpha');
-$flowIdentifier = GETPOST('flowIdentifier', 'alpha');
+$flowFilename = dol_sanitizeFileName(GETPOST('flowFilename', 'alpha'));			// flowFilename is like "123456-file.tar (1).gz"
+$flowIdentifier = GETPOST('flowIdentifier', 'alpha');		// flowIdentifiers is like "123456-filetargz"
 $flowChunkNumber = GETPOST('flowChunkNumber', 'alpha');
 $flowChunkSize = GETPOST('flowChunkSize', 'alpha');
 $flowTotalSize = GETPOST('flowTotalSize', 'alpha');
 
-$result = restrictedArea($user, $module, 0, '', '', 'fk_soc', 'rowid', 0, 1);	// Call with mode return
+// Security check: only a logged customer can upload, only into the temp directory of the module sellyoursaas,
+// and only into the directory of automigration of an instance that he owns.
+$socidinsession = empty($_SESSION['dol_loginsellyoursaas']) ? 0 : (int) $_SESSION['dol_loginsellyoursaas'];
+if ($socidinsession <= 0) {
+	httponly_accessforbidden("Access denied. You must be logged.");
+}
+if ($module != 'sellyoursaas') {
+	httponly_accessforbidden("Param module is not allowed.");
+}
+$tmparray = array();
+if (!preg_match('/^automigration_([0-9]+)\.tmp$/', $uploaddirname, $tmparray)) {
+	httponly_accessforbidden("Param uploaddirname is not allowed.");
+}
+$sqlcheck = "SELECT rowid FROM ".MAIN_DB_PREFIX."contrat WHERE rowid = ".((int) $tmparray[1])." AND fk_soc = ".((int) $socidinsession);
+$resqlcheck = $db->query($sqlcheck);
+if (!$resqlcheck || $db->num_rows($resqlcheck) <= 0) {
+	dol_syslog("ErrorInvalidInstanceSurelyAHackAttempt flowjs upload into ".$uploaddirname." refused for thirdparty id=".$socidinsession, LOG_WARNING);
+	httponly_accessforbidden("Access denied. You don't own this instance.");
+}
 
 if ($action != 'upload') {
 	httponly_accessforbidden("Param action must be 'upload'");
@@ -120,10 +142,10 @@ top_httphead();
 $result = false;
 
 if (!empty($upload_dir)) {
-	$temp_dir = $upload_dir.'/'.$flowIdentifier;
+	$temp_dir = dol_sanitizePathName($upload_dir).'/'.dol_sanitizeFileName($flowIdentifier);
 } else {
-	$temp_dir = DOL_DATA_ROOT.'/'.$module.'/temp/'.$flowIdentifier;
-	$upload_dir = DOL_DATA_ROOT.'/'.$module.'/temp/';
+	$temp_dir = DOL_DATA_ROOT.'/'.dol_sanitizePathName($module).'/temp/'.dol_sanitizeFileName($flowIdentifier);
+	$upload_dir = DOL_DATA_ROOT.'/'.dol_sanitizePathName($module).'/temp/';
 }
 
 if ($module != "test" && !isModEnabled($module)) {

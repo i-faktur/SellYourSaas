@@ -15,6 +15,19 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ *
+ * @var string $backtourl
+ * @var Societe $mythirdpartyaccount
+ * @var array $listofcontractid
+ * @var int $nowyear
+ * @var int $nowmonth
+ */
+
 // Protection to avoid direct call of template
 if (empty($conf) || ! is_object($conf)) {
 	print "Error, template page can't be called as URL";
@@ -60,6 +73,12 @@ print '<input type="hidden" name="action" value="createpaymentmode">'."\n";
 print '<input type="hidden" name="mode" value="registerpaymentmode">'."\n";
 print '<input type="hidden" name="backtourl" value="'.$backtourl.'">';
 //print '<input type="hidden" name="thirdparty_id" value="'.$mythirdpartyaccount->id.'">';
+
+// Show a note if we are in Stripe sandbox mode (so if the name of the thirdparty contains the reserved keyword)
+if (sellyoursaasIsSandboxThirdparty($mythirdpartyaccount)) {
+	print '<div class="note note-warning justify">'.$langs->trans("PaymentPageInStripeSandboxMode").'</div>';
+	print '<br>';
+}
 
 $tmp = $mythirdpartyaccount->getOutstandingBills('customer');
 $outstandingTotalIncTax = $tmp['opened'];
@@ -142,7 +161,7 @@ if ($totalInvoiced == 0) {
 		// Show input text for the discount code
 		if ($acceptdiscountcode) {
 			print '<br>';
-			print $langs->trans("DiscountCode").': <input type="text" name="discountcode" id="discountcode" value="'.$defaultdiscountcode.'" class="maxwidth200"><br>';
+			print $langs->trans("DiscountCode").': <input type="text" name="discountcode" id="discountcode" value="'.$defaultdiscountcode.'" class="maxwidth200" spellcheck="false"><br>';
 			print '<div class="discountcodetext margintoponly" id="discountcodetext" autocomplete="off"></div>';
 			//var_dump($listofcontractid);
 			print '<script type="text/javascript" language="javascript">'."\n";
@@ -246,6 +265,13 @@ print '
 
 		<br>
 ';
+
+if (count(sellyoursaasGetSuspendedContracts($mythirdpartyaccount->id)) > 0) {
+	print '<div class="note note-warning linksepa justify hidden">';
+	print $langs->trans("SEPADoesNotUnsupendInstantly");
+	print '</div>';
+}
+
 if (!empty($arraycontracttransfer)) {
 	$listcontract = "";
 	foreach ($arraycontracttransfer as $key => $obj) {
@@ -260,6 +286,7 @@ if (!empty($arraycontracttransfer)) {
 	print '</div>';
 }
 print '
+		<hr>
 		<div class="linkcard">';
 
 
@@ -268,7 +295,6 @@ $foundcard=0;
 foreach ($arrayofcompanypaymentmode as $companypaymentmodetemp) {
 	if ($companypaymentmodetemp->type == 'card') {
 		$foundcard++;
-		print '<hr>';
 		print '<div class="marginbottomonly">'.img_credit_card($companypaymentmodetemp->card_type, 'marginrightonlyimp');
 		print '<span class="opacitymedium">'.$langs->trans("CurrentCreditOrDebitCard").'</span></div>';
 		print '<!-- companypaymentmode id = '.$companypaymentmodetemp->id.' -->';
@@ -279,13 +305,13 @@ foreach ($arrayofcompanypaymentmode as $companypaymentmodetemp) {
 		if ($companypaymentmodetemp->exp_date_year < $nowyear ||
 		($companypaymentmodetemp->exp_date_year == $nowyear && $companypaymentmodetemp->exp_date_month <= $nowmonth)) {
 			print '<br>';
-			print img_warning().' '.$langs->trans("YourPaymentModeWillExpireFixItSoon", $urltoenterpaymentmode);
+			print img_warning().' '.$langs->trans("YourPaymentModeWillExpireFixItSoon");
 		}
 	}
 }
 if ($foundcard) {
 	print '<hr>';
-	print '<div class="marginbottomonly">'.img_credit_card($companypaymentmodetemp->card_type, 'marginrightonlyimp');
+	print '<div class="marginbottomonly">'.img_credit_card('', 'marginrightonlyimp');
 	print '<span class="opacitymedium">'.$langs->trans("NewCreditOrDebitCard").'</span></div>';
 }
 
@@ -300,7 +326,8 @@ if (getDolGlobalString('STRIPE_USE_INTENT_WITH_AUTOMATIC_CONFIRMATION')) {	// Us
 
 	$service = 'StripeLive';
 	$servicestatus = 1;
-	if (!getDolGlobalString('STRIPE_LIVE') /* || GETPOST('forcesandbox', 'alpha') */ || getDolGlobalString('SELLYOURSAAS_FORCE_STRIPE_TEST')) {
+	if (!getDolGlobalString('STRIPE_LIVE') /* || GETPOST('forcesandbox', 'alpha') */ || getDolGlobalString('SELLYOURSAAS_FORCE_STRIPE_TEST') || sellyoursaasIsSandboxThirdparty($mythirdpartyaccount)) {
+		// Also use the Test account if the name of the thirdparty contains the reserved keyword for Stripe sandbox
 		$service = 'StripeTest';
 		$servicestatus = 0;
 	}
@@ -329,12 +356,13 @@ if (getDolGlobalString('STRIPE_USE_INTENT_WITH_AUTOMATIC_CONFIRMATION')) {	// Us
 
 
 print '<div class="row"><div class="col-md-12"><label class="valignmiddle" style="margin-bottom: 20px">'.$langs->trans("NameOnCard").':</label> ';
-print '<input id="cardholder-name" class="minwidth200 valignmiddle" style="margin-bottom: 15px" type="text" name="proprio" value="'.GETPOST('proprio', 'alpha').'" autocomplete="off" autofocus>';
+print '<input id="cardholder-name" class="minwidth200 valignmiddle" style="margin-bottom: 15px" type="text" name="proprio" value="'.GETPOST('proprio', 'alpha').'" autocomplete="off" spellcheck="false" autofocus>';
 print '</div></div>';
 
 require_once DOL_DOCUMENT_ROOT.'/stripe/config.php';
 // Reforce the $stripearrayofkeys because content may have been changed by the include of config.php
-if (!getDolGlobalString('STRIPE_LIVE') /* || GETPOST('forcesandbox', 'alpha') */ || getDolGlobalString('SELLYOURSAAS_FORCE_STRIPE_TEST')) {
+// Also use the Test account if the name of the thirdparty contains the reserved keyword for Stripe sandbox
+if (!getDolGlobalString('STRIPE_LIVE') /* || GETPOST('forcesandbox', 'alpha') */ || getDolGlobalString('SELLYOURSAAS_FORCE_STRIPE_TEST') || sellyoursaasIsSandboxThirdparty($mythirdpartyaccount)) {
 	$stripearrayofkeys = $stripearrayofkeysbyenv[0];	// Test
 } else {
 	$stripearrayofkeys = $stripearrayofkeysbyenv[1];	// Live
@@ -347,7 +375,7 @@ print '	<center><div class="form-row" style="max-width: 320px">
 		</div>
 
 		<!-- Used to display form errors. -->
-		<div id="card-errors" role="alert"></div>
+		<div id="card-errors" role="alert" class="paddingtop"></div>
 
 		</div></center>
         ';
@@ -356,9 +384,9 @@ print '<br>';
 
 if (getDolGlobalString('STRIPE_USE_INTENT_WITH_AUTOMATIC_CONFIRMATION') && is_object($setupintent)) {
 	print '<input type="hidden" name="setupintentid" value="'.$setupintent->id.'">'."\n";
-	print '<button class="btn btn-info btn-circle" id="buttontopay" data-secret="'.$setupintent->client_secret.'">'.$langs->trans("Save").'</button>';
+	print '<button class="btn btn-info btn-circle" id="buttontopay" data-secret="'.$setupintent->client_secret.'">'.$langs->trans("SaveAndPay").'</button>';
 } else {
-	print '<button class="btn btn-info btn-circle" id="buttontopay">'.$langs->trans("Save").'</button>';
+	print '<button class="btn btn-info btn-circle" id="buttontopay">'.$langs->trans("SaveAndPay").'</button>';
 }
 
 print '<img id="hourglasstopay" class="hidden" src="'.DOL_URL_ROOT.'/theme/'.$conf->theme.'/img/working.gif">';
@@ -718,7 +746,7 @@ if ($mythirdpartyaccount->isInEEC()) {
 	}
 
 	$enabledformtoentersepa = getDolGlobalString('SELLYOURSAAS_ENABLE_SEPA');
-	$enabledformtoentersepaforids = explode(',', getDolGlobalString('SELLYOURSAAS_ENABLE_SEPA_FOR_THIRDPARTYID'));	// To test by enabling only on a given thirdparty, use SELLYOURSAAS_ENABLE_SEPA_FOR_THIRDPARTYID = 'id1,id2...' of thirparty.
+	$enabledformtoentersepaforids = explode(',', getDolGlobalString('SELLYOURSAAS_ENABLE_SEPA_FOR_THIRDPARTYID'));	// To test by enabling only on a given third party, use SELLYOURSAAS_ENABLE_SEPA_FOR_THIRDPARTYID = 'id1,id2...' of third party.
 	//$enabledformtoentersepa = 1;
 
 	if (empty($enabledformtoentersepaforids[0])) {
@@ -741,8 +769,9 @@ if ($mythirdpartyaccount->isInEEC()) {
 		print '<div class="opacitymedium small justify">'.$langs->trans("SEPALegalText", $mysoc->name, $mysoc->name).'</div>';
 
 		print '<br><br>';
-		print '<input type="submit" name="submitsepa" value="'.$langs->trans("Save").'" class="btn btn-info btn-circle">';
-		print ' ';
+
+		print '<input type="submit" name="submitsepa" value="'.$langs->trans("SaveAndPay").'" class="btn btn-info btn-circle">';
+		print ' &nbsp; ';
 		print '<a id="buttontocancel" href="'.($backtourl ? $backtourl : $_SERVER["PHP_SELF"]).'" class="btn green-haze btn-circle">'.$langs->trans("Cancel").'</a>';
 	} else {
 		if (! $foundban) {

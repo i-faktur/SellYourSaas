@@ -15,8 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  * or see http://www.gnu.org/
- *
- * Script to update dns zone files on customer instances.
+ */
+
+/**
+ * Script to update the dns zone file of a customer instance to update the IP address of the instance.
+ * This script is called by action_suspend_unsuspend.sh when action=suspendredirect
  */
 
 if (!defined('NOSESSION')) {
@@ -31,7 +34,7 @@ if (!defined('NOREQUIREVIRTUALURL')) {
 
 $sapi_type = php_sapi_name();
 $script_file = basename(__FILE__);
-$path=dirname(__FILE__).'/';
+$path = dirname(__FILE__).'/';
 
 // Test if batch mode
 if (substr($sapi_type, 0, 3) == 'cgi') {
@@ -40,8 +43,8 @@ if (substr($sapi_type, 0, 3) == 'cgi') {
 }
 
 // Global variables
-$version='1.0';
-$error=0;
+$version = '1.0';
+$error = 0;
 
 // Include Dolibarr environment
 @set_time_limit(0);							// No timeout for this script
@@ -71,7 +74,7 @@ if (empty($dolibarrdir)) {
 
 // Load Dolibarr environment
 $res=0;
-// Try master.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try master.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -106,16 +109,20 @@ if (! $res && file_exists($dolibarrdir."/htdocs/master.inc.php")) {
 	$res=@include $dolibarrdir."/htdocs/master.inc.php";
 }
 if (! $res) {
-	print("Include of master fails");
+	print("Include of master fails\n");
 	exit(-1);
 }
 // After this $db, $mysoc, $langs, $conf and $hookmanager are defined (Opened $db handler to database will be closed at end of file).
 // $user is created but empty.
-
+/**
+ * @var string $dolibarr_main_restrict_os_commands
+ */
 include_once DOL_DOCUMENT_ROOT.'/core/lib/security2.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/class/utils.class.php';
+
+$dolibarr_main_restrict_os_commands = ($dolibarr_main_restrict_os_commands ? $dolibarr_main_restrict_os_commands.', named-checkzone, rnc, nslookup' : '');
 
 $quiet = 0;
 $test = 0;
@@ -376,6 +383,8 @@ if ($mode == 'set') {
 	}
 	if (!$test) {
 		dol_move($tmpfile, $fullpathdnszonefile, 0, 1, 0, 0);
+		// Restore permission lost by the move (the move keeps umask permission of the tmp file)
+		dolChmod($fullpathdnszonefile, '0644');
 	}
 
 	// Restart DNS server

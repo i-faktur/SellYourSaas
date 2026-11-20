@@ -22,81 +22,6 @@
  */
 
 
-// Include function for backward comaptibility with v18-
-if (!function_exists('dolPrintLabel')) {
-	/**
-	 * Return a string label ready to be output on HTML content
-	 * To use text inside an attribute, use can simply only dol_escape_htmltag()
-	 *
-	 * @param	string	$s		String to print
-	 * @return	string			String ready for HTML output
-	 */
-	function dolPrintLabel($s)
-	{
-		return dol_escape_htmltag(dol_htmlentitiesbr($s));
-	}
-}
-
-if (!function_exists('dolPrintHTML')) {
-	/**
-	 * Return a string ready to be output on HTML page
-	 * To use text inside an attribute, you can simply use dol_escape_htmltag()
-	 *
-	 * @param	string	$s				String to print
-	 * @param	int		$allowiframe	Allow iframe tags
-	 * @return	string					String ready for HTML output
-	 */
-	function dolPrintHTML($s, $allowiframe = 0)
-	{
-		return dol_escape_htmltag(dol_htmlwithnojs(dol_string_onlythesehtmltags(dol_htmlentitiesbr($s), 1, 1, 1, $allowiframe)), 1, 1, 'common', 0, 1);
-	}
-}
-
-if (!function_exists('dolPrintHTMLForAttribute')) {
-	/**
-	 * Return a string ready to be output on an HTML attribute (alt, title, ...)
-	 *
-	 * @param	string	$s		String to print
-	 * @return	string			String ready for HTML output
-	 */
-	function dolPrintHTMLForAttribute($s)
-	{
-		// The dol_htmlentitiesbr will convert simple text into html
-		// The dol_escape_htmltag will escape html chars.
-		return dol_escape_htmltag(dol_htmlentitiesbr($s), 1, -1);
-	}
-}
-
-if (!function_exists('dolPrintHTMLForTextArea')) {
-	/**
-	 * Return a string ready to be output on input textarea
-	 * To use text inside an attribute, use can use only dol_escape_htmltag()
-	 *
-	 * @param	string	$s				String to print
-	 * @param	int		$allowiframe	Allow iframe tags
-	 * @return	string					String ready for HTML output into a textarea
-	 */
-	function dolPrintHTMLForTextArea($s, $allowiframe = 0)
-	{
-		return dol_escape_htmltag(dol_htmlwithnojs(dol_string_onlythesehtmltags(dol_htmlentitiesbr($s), 1, 1, 1, $allowiframe)), 1, 1, '', 0, 1);
-	}
-}
-
-if (!function_exists('dolPrintPassword')) {
-	/**
-	 * Return a string ready to be output on an HTML attribute (alt, title, ...)
-	 *
-	 * @param	string	$s		String to print
-	 * @return	string			String ready for HTML output
-	 */
-	function dolPrintPassword($s)
-	{
-		return htmlspecialchars($s, ENT_COMPAT, 'UTF-8');
-	}
-}
-
-
-
 /**
  * getNextInstanceInChain
  *
@@ -278,8 +203,14 @@ function getListOfLinks($object, $lastloginadmin, $lastpassadmin)
 				$urlmyaccount = preg_replace('/' . getDolGlobalString('SELLYOURSAAS_MAIN_DOMAIN_NAME').'/', $thirdparty->array_options['options_domain_registration_page'], $urlmyaccount);
 			}
 		}
-		$dol_login_hash=dol_hash(getDolGlobalString('SELLYOURSAAS_KEYFORHASH') . $thirdparty->email.dol_print_date(dol_now(), 'dayrfc'), 5);	// hash is valid one hour
-		$url=$urlmyaccount.'?mode=logout_dashboard&password=&username='.urlencode($thirdparty->email).'&login_hash='.urlencode($dol_login_hash);	// Note that password may have change and not being the one of dolibarr admin user
+		$magiclinkkey = getDolGlobalString('SELLYOURSAAS_KEYFORHASH');
+		if (dol_strlen($magiclinkkey) >= 32) {
+			$dol_login_hash=dol_hash($magiclinkkey . $thirdparty->email.dol_print_date(dol_now(), 'dayrfc'), 5);	// hash is valid one hour
+			$url=$urlmyaccount.'?mode=logout_dashboard&password=&username='.urlencode($thirdparty->email).'&login_hash='.urlencode($dol_login_hash);	// Note that password may have change and not being the one of dolibarr admin user
+		} else {
+			// No magic login link without a strong secret key
+			$url=$urlmyaccount.'?mode=logout_dashboard&username='.urlencode($thirdparty->email);
+		}
 	}
 
 	$link = '<input type="text" class="quatrevingtpercentminusx" value="'.$url.'" spellcheck="false"> <a class="wordwrap" href="'.$url.'" target="_blank" id="dashboardlink">'.img_picto('', 'globe').'</a>';
@@ -343,16 +274,20 @@ function getListOfLinks($object, $lastloginadmin, $lastpassadmin)
 
 	$links.='<br>'."\n";
 
+	$links.='<div class="info">'."\n";
+
 	// SSH
 	$sshconnectstring='ssh '.$object->username_os.'@'.$object->hostname_os;
 	$links.='<span class="fa fa-terminal"></span> SSH connect string: ';
 	$links.='<input type="text" name="sshconnectstring" id="sshconnectstring" value="'.dol_escape_htmltag($sshconnectstring).'" class="maxwidth250" spellcheck="false">';
+	$links .= showValueWithClipboardCPButton($sshconnectstring, 0, 'none');
 	if ($conf->use_javascript_ajax) {
 		$links.=ajax_autoselect('sshconnectstring');
 	}
-	$links.=' &nbsp; '.$langs->trans("or").' SU: ';
+	$links.='<br><span class="fa fa-terminal"></span> SU connect string: ';
 	$sustring='su '.$object->username_os;
 	$links.='<input type="text" name="sustring" id="sustring" value="'.$sustring.'" class="maxwidth200" spellcheck="false">';
+	$links .= showValueWithClipboardCPButton($sustring, 0, 'none');
 	if ($conf->use_javascript_ajax) {
 		$links.=ajax_autoselect('sustring');
 	}
@@ -363,16 +298,20 @@ function getListOfLinks($object, $lastloginadmin, $lastpassadmin)
 	//$sftpconnectstring=$object->username_os.':'.$object->password_web.'@'.$object->hostname_os.$conf->global->DOLICLOUD_EXT_HOME.'/'.$object->username_os.'/'.preg_replace('/_([a-zA-Z0-9]+)$/','',$object->database_db);
 	$sftpconnectstring='sftp://'.$object->username_os.'@'.$object->hostname_os.'/' . getDolGlobalString('DOLICLOUD_INSTANCES_PATH').'/'.$object->username_os.'/'.preg_replace('/_([a-zA-Z0-9]+)$/', '', $object->database_db);
 	$links.='<span class="fa fa-terminal"></span> SFTP connect string: ';
-	$links.='<input type="text" name="sftpconnectstring" id="sftpconnectstring" value="'.dol_escape_htmltag($sftpconnectstring).'" spellcheck="false"><br>';
+	$links.='<input type="text" name="sftpconnectstring" id="sftpconnectstring" value="'.dol_escape_htmltag($sftpconnectstring).'" spellcheck="false">';
+	$links .= showValueWithClipboardCPButton($sftpconnectstring, 0, 'none');
+	$links.='<br>';
 	if ($conf->use_javascript_ajax) {
 		$links.=ajax_autoselect('sftpconnectstring');
 	}
 	//$links.='<br>';
 
 	// MySQL
-	$mysqlconnectstring='mysql -A -C -u '.$object->username_db.' -p\''.$object->password_db.'\' -h '.$object->hostname_db.' -D '.$object->database_db;
+	$mysqlconnectstring='mysql -A -C -u '.$object->username_db.' -p\''.$object->password_db.'\' -h '.$object->hostname_db.' -D '.$object->database_db.' --skip-ssl';
 	$links.='<span class="fa fa-database"></span> Mysql connect string: ';
-	$links.='<input type="text" name="mysqlconnectstring" id="mysqlconnectstring" value="'.dol_escape_htmltag($mysqlconnectstring).'" spellcheck="false"><br>';
+	$links.='<input type="text" name="mysqlconnectstring" id="mysqlconnectstring" value="'.dol_escape_htmltag($mysqlconnectstring).'" spellcheck="false">';
+	$links .= showValueWithClipboardCPButton($mysqlconnectstring, 0, 'none');
+	$links.='<br>';
 	if ($conf->use_javascript_ajax) {
 		$links.=ajax_autoselect('mysqlconnectstring');
 	}
@@ -386,10 +325,14 @@ function getListOfLinks($object, $lastloginadmin, $lastpassadmin)
 	$jdbcconnectstring='jdbc:mysql://'.$object->hostname_db.'/';
 	//$jdbcconnectstring.=$object->database_db;
 	$links.='<span class="fa fa-database"></span> JDBC connect string: ';
-	$links.='<input type="text" name="jdbcconnectstring" id="jdbcconnectstring" value="'.dol_escape_htmltag($jdbcconnectstring).'" spellcheck="false"><br>';
+	$links.='<input type="text" name="jdbcconnectstring" id="jdbcconnectstring" value="'.dol_escape_htmltag($jdbcconnectstring).'" spellcheck="false">';
+	$links .= showValueWithClipboardCPButton($jdbcconnectstring, 0, 'none');
+	$links.='<br>';
 	if ($conf->use_javascript_ajax) {
 		$links.=ajax_autoselect('jdbcconnectstring');
 	}
+
+	$links.='</div>'."\n";
 
 	$links.='<br>';
 	$links.='<br>';
@@ -423,19 +366,20 @@ function getListOfLinks($object, $lastloginadmin, $lastpassadmin)
 
 	// Mysql command to block remote ip access (allow only master) or allow any ip.
 	$ipofmaster = $_SERVER['SERVER_ADDR'];
-	$mysqlblockallowremoteip = '';
+	$mysqlblockallowremoteip = '-- Make db login usable from master only'."\n";
 	$mysqlblockallowremoteip .= "CREATE USER '".$object->username_db."'@'".$ipofmaster."' IDENTIFIED BY '".$object->password_db."'; GRANT CREATE,CREATE TEMPORARY TABLES,CREATE VIEW,DROP,DELETE,INSERT,SELECT,UPDATE,ALTER,INDEX,LOCK TABLES,REFERENCES,SHOW VIEW ON ".$object->database_db.".* TO '".$object->username_db."'@'".$ipofmaster."';";
 	$mysqlblockallowremoteip .= " DROP USER '".$object->username_db."'@'%';";
-	$mysqlblockallowremoteip .= "\n\n";
+	$mysqlblockallowremoteip .= "\n";
+	$mysqlblockallowremoteip .= "-- Allow db login from any remote ip\n";
 	$mysqlblockallowremoteip .= "CREATE USER '".$object->username_db."'@'%' IDENTIFIED BY '".$object->password_db."'; GRANT CREATE,CREATE TEMPORARY TABLES,CREATE VIEW,DROP,DELETE,INSERT,SELECT,UPDATE,ALTER,INDEX,LOCK TABLES,REFERENCES,SHOW VIEW ON ".$object->database_db.".* TO '".$object->username_db."'@'%';";
 	$mysqlblockallowremoteip .= " DROP USER '".$object->username_db."'@'".$ipofmaster."';";
 	$links.='<span class="fa fa-database"></span> ';
 	$links.='Mysql sql command to block/allow remote IP access:<br>';
-	$links.='<textarea id="mysqlblockallowremoteip" name="mysqlblockallowremoteip" class="quatrevingtpercent" rows="'.ROWS_3.'" spellcheck="false">'.$mysqlblockallowremoteip.'</textarea>';
+	$links.='<textarea id="mysqlblockallowremoteip" name="mysqlblockallowremoteip" class="quatrevingtpercent" rows="'.ROWS_6.'" spellcheck="false">'.$mysqlblockallowremoteip.'</textarea>';
 	//if ($conf->use_javascript_ajax) $links.=ajax_autoselect("mysqlblockallowremoteip", 0);
 	$links.='<br><br>';
 
-	// Rsync to Restore Program directory
+	// Rsync to copy Program directory
 	$sftprestorestring='rsync -n -v -a --exclude \'conf.php\' --exclude \'*.cache\' htdocs/* '.$object->username_os.'@'.$object->hostname_os.':'.$object->database_db.'/htdocs/';
 	$links.='<span class="fa fa-terminal"></span> ';
 	$links.='Rsync to copy/overwrite application dir';
@@ -446,7 +390,7 @@ function getListOfLinks($object, $lastloginadmin, $lastpassadmin)
 	}
 	$links.='<br>';
 
-	// Rsync to Restore Document directory
+	// Rsync to copy Document directory
 	$sftprestorestring='rsync -n -v -a --exclude \'*.cache\' documents/* '.$object->username_os.'@'.$object->hostname_os.':'.$object->database_db.'/documents';
 	$links.='<span class="fa fa-terminal"></span> ';
 	$links.='Rsync to copy/overwrite document dir';
@@ -458,10 +402,10 @@ function getListOfLinks($object, $lastloginadmin, $lastpassadmin)
 	$links.='<br>';
 
 	// Rsync to Deploy module
-	$sftpdeploystring='rsync -n -v -a --exclude \'*.cache\' --exclude \'conf\.php\' pathtohtdocsofmodule/* '.$object->username_os.'@'.$object->hostname_os.':'.$object->database_db.'/htdocs/custom/namemodule';
+	$sftpdeploystring='rsync -n -v -a --exclude \'*.cache\' --exclude \'conf\.php\' '.DOL_DATA_ROOT.'/sellyoursaas/git/dir_namemodule/* '.$object->username_os.'@'.$object->hostname_os.':'.$object->database_db.'/htdocs/custom/namemodule';
 	$links.='<span class="fa fa-terminal"></span> ';
 	$links.='Rsync to install or overwrite module';
-	$links.='<span class="opacitymedium"> (remove -n to execute really)</span>:<br>';
+	$links.='<span class="opacitymedium"> (to run on the master server, remove -n to execute really)</span>:<br>';
 	$links.='<input type="text" id="sftpdeploystring" name="sftpdeploystring" value="'.$sftpdeploystring.'" class="quatrevingtpercent" spellcheck="false"><br>';
 	if ($conf->use_javascript_ajax) {
 		$links.=ajax_autoselect("sftpdeploystring", 0);
@@ -471,19 +415,30 @@ function getListOfLinks($object, $lastloginadmin, $lastpassadmin)
 	// Upgrade link
 	$upgradestringtoshow=$upgradestring.' test';
 	$links.='<span class="fa fa-arrow-up"></span> ';
-	$links.='Upgrade version line string';
-	$links.='<span class="opacitymedium"> (remplacer "test" par "confirmunlock" pour exécuter réellement)</span><br>';
+	$links.=$langs->trans("UpgradeMainApplication");
+	$links.='<span class="opacitymedium"> (to run on the master server, replace "test" with "confirmunlock" to execute really)</span><br>';
 	$links.='<input type="text" id="upgradestring" name="upgradestring" value="'.$upgradestringtoshow.'" class="quatrevingtpercent" spellcheck="false"><br>';
 	if ($conf->use_javascript_ajax) {
 		$links.=ajax_autoselect("upgradestring", 0);
 	}
 	$links.='<br>';
 
+	// Deploy module command
+	$deploymodulestring = getDolGlobalString('DOLICLOUD_SCRIPTS_PATH').'/deployment_deploy_module.php test PRODUCTREF '.$object->ref_customer.' onlypaid '.(empty($conf->file->instance_unique_id) ? 'masteruniquekey' : $conf->file->instance_unique_id);
+	$links.='<span class="fa fa-cubes"></span> ';
+	$links.=$langs->trans("UpgradeAModule");
+	$links.='<span class="opacitymedium"> (to run as root on the deployment server, replace "test" with "confirm" to execute really)</span><br>';
+	$links.='<input type="text" id="deploymodulestring" name="deploymodulestring" value="'.dol_escape_htmltag($deploymodulestring).'" class="quatrevingtpercent" spellcheck="false"><br>';
+	if ($conf->use_javascript_ajax) {
+		$links.=ajax_autoselect("deploymodulestring", 0);
+	}
+	$links.='<br>';
+
 	// Purge data
 	$purgestringtoshow=$purgestring;
 	$links.='<span class="fa fa-eraser"></span> ';
-	$links.='Purge command line string';
-	$links.='<span class="opacitymedium"> (remplacer "test" par "confirm" pour exécuter réellement)</span><br>';
+	$links.=$langs->trans("PurgeDataCommand");
+	$links.='<span class="opacitymedium"> (to run on the master server, replace "test" with "confirm" to execute really)</span><br>';
 	$links.='<input type="text" id="purgestring" name="purgestring" value="'.$purgestringtoshow.'" class="quatrevingtpercent" spellcheck="false"><br>';
 	if ($conf->use_javascript_ajax) {
 		$links.=ajax_autoselect("purgestring", 0);
@@ -607,5 +562,258 @@ function is_windows()
 function command_exists($command)
 {
 	$test = is_windows() ? "where" : "which";
-	return is_executable(trim(shell_exec("$test $command")));
+	return is_executable(trim(exec("$test $command")));
+}
+
+/**
+ * Update instance info by connecting to it and getting some info like version, list of modules, last admin user/pass, etc.
+ * Saving data is also done if something has changed.
+ * It also sets ->nbofusers from the qty of the contract line with the 'User' resource (value refreshed by the 'refresh' action).
+ *
+ * @param	Object	$object		Object instance to update
+ * @return 	int					Return <0if KO, >0 if OK
+ */
+function updateInstanceInfo($object)
+{
+	global $user, $langs, $conf, $db;
+
+	$error = 0;
+
+	$hostname_db  = $object->array_options['options_hostname_db'];
+	$username_db  = $object->array_options['options_username_db'];
+	$password_db  = $object->array_options['options_password_db'];
+	$database_db  = $object->array_options['options_database_db'];
+	$port_db      = (!empty($object->array_options['options_port_db']) ? $object->array_options['options_port_db'] : 3306);
+	$prefix_db    = (!empty($object->array_options['options_prefix_db']) ? $object->array_options['options_prefix_db'] : 'llx_');
+	$hostname_os  = $object->array_options['options_hostname_os'];
+	$username_os  = $object->array_options['options_username_os'];
+	$password_os  = $object->array_options['options_password_os'];
+	$version      = $object->array_options['options_instanceversion'];
+	$username_web = $object->thirdparty->email;
+	$password_web = $object->thirdparty->array_options['options_password'];
+	$type_db = $conf->db->type;
+
+	$tmp = explode('.', $object->ref_customer, 2);
+
+	$object->instance = $tmp[0];
+	$object->hostname_db  = $hostname_db;
+	$object->username_db  = $username_db;
+	$object->password_db  = $password_db;
+	$object->database_db  = $database_db;
+	$object->port_db      = $port_db;
+	$object->prefix_db    = $prefix_db;
+	$object->username_os  = $username_os;
+	$object->password_os  = $password_os;
+	$object->hostname_os  = $hostname_os;
+	$object->version      = $version;
+	$object->username_web = $username_web;
+	$object->password_web = $password_web;
+
+	// Set the nb of users from the qty of contract lines with the 'User' resource (qty is the value refreshed by the 'refresh' action)
+	dol_include_once('/sellyoursaas/lib/sellyoursaas.lib.php');
+	$tmpdataofcontract = sellyoursaasGetExpirationDate($object, 0);
+	$object->nbofusers = $tmpdataofcontract['nbusers'];
+
+	// Connect to remote instance
+	$newdb = getDoliDBInstance($type_db, $hostname_db, $username_db, $password_db, $database_db, $port_db);
+	$newdb->prefix_db = $prefix_db;
+
+	$savetodo = 0;
+	$stringofversion = '';
+	$stringoflistofmodules = '';
+
+	$lastloginadmin = '';
+	$lastpassadmin = '';
+	$other_informations = array();
+
+	if (is_object($newdb) && $newdb->connected) {
+		// Get $lastloginadmin, $lastpassadmin, $stringoflistofmodules
+		$stringoflistofmodules='';
+
+		// Define actions specific to some deployed applications (off by default).
+		$fordolibarr = getDolGlobalString('SELLYOURSAAS_ALLOW_DOLIBARR_SPECIFIC') ? 1 : 0;
+		$forglpi = 0;
+		if (preg_match('/glpi.*\.cloud/', $object->ref_customer)) {
+			$fordolibarr = 0;
+			$forglpi = 1;
+		}
+
+		// Get user/pass of last admin user
+		if (!empty($fordolibarr)) {
+			// TODO Put the definition of sql to get last used admin user into the package.
+			$sql="SELECT login, pass FROM ".$prefix_db."user WHERE admin = 1 ORDER BY statut DESC, datelastlogin DESC LIMIT 1";
+			if (preg_match('/glpi.*\.cloud/', $object->ref_customer)) {
+				$sql="SELECT name as login, password as pass FROM glpi_users WHERE 1 = 1 ORDER BY is_active DESC, last_login DESC LIMIT 1";
+			}
+
+			$resql=$newdb->query($sql);
+			if ($resql) {
+				$obj = $newdb->fetch_object($resql);
+				$object->lastlogin_admin = $obj->login;
+				$object->lastpass_admin = $obj->pass;
+				$lastloginadmin = $object->lastlogin_admin;
+				$lastpassadmin = $object->lastpass_admin;
+			} else {
+				setEventMessages('Success to connect to server, but failed to read last admin/pass user: '.$newdb->lasterror(), null, 'errors');
+			}
+		}
+
+		// Get user/pass of last admin user
+		if (!empty($forglpi)) {
+			// TODO Put the definition of sql to get last used admin user into the package.
+			$sql="SELECT name as login, password as pass FROM glpi_users WHERE 1 = 1 ORDER BY is_active DESC, last_login DESC LIMIT 1";
+
+			$resql=$newdb->query($sql);
+			if ($resql) {
+				$obj = $newdb->fetch_object($resql);
+				if ($obj) {
+					$object->lastlogin_admin = $obj->login;
+					$object->lastpass_admin = $obj->pass;
+					$lastloginadmin = $object->lastlogin_admin;
+					$lastpassadmin = $object->lastpass_admin;
+				}
+
+				$newdb->free($resql);
+			} else {
+				setEventMessages('Success to connect to server, but failed to read last admin/pass user: '.$newdb->lasterror(), null, 'errors');
+			}
+		}
+
+		// Replace __INSTANCEDBPREFIX__
+		$substitarray = array(
+			'__INSTANCEDBPREFIX__' => $prefix_db
+		);
+
+		// Get $stringofversion and $stringoflistofmodules
+		$formula = '';
+		$sqltogetpackage = 'SELECT p.version_formula FROM '.$db->prefix().'packages as p, '.$db->prefix().'contratdet as cd, '.$db->prefix().'product_extrafields as pe';
+		$sqltogetpackage .= ' WHERE cd.fk_contrat = '.((int) $object->id);
+		$sqltogetpackage .= ' AND cd.fk_product = pe.fk_object';
+		$sqltogetpackage .= " AND pe.app_or_option = 'app'";
+		$sqltogetpackage .= ' AND pe.package = p.rowid';
+		$sqltogetpackage .= ' LIMIT 1';		// We should always have only one contract line with type 'app', so one line linked to a package with a version_formula.
+
+		$resqltogetpackage = $db->query($sqltogetpackage);
+		if ($resqltogetpackage) {
+			$obj = $db->fetch_object($resqltogetpackage);
+			if ($obj) {
+				$formula = $obj->version_formula;
+			}
+		} else {
+			setEventMessages('Failed to execute SQL: '.$db->lasterror(), null, 'warnings');
+			$error++;
+		}
+		if (preg_match('/SQL:/', $formula)) {
+			// Set $stringofversion with result of sql defined into formula to get version of instance. This sql must return a field "version" and a field "name" (name of version).
+			$formula = preg_replace('/SQL:/', '', $formula);
+			$formula = make_substitutions($formula, $substitarray);
+			// 'MAIN_VERSION_LAST_UPGRADE='.$confinstance->global->MAIN_VERSION_LAST_UPGRADE;
+			$resqlformula = $newdb->query($formula);
+
+			if ($resqlformula) {
+				$num = $newdb->num_rows($resqlformula);
+
+				$i=0;
+				while ($i < $num) {
+					$obj = $newdb->fetch_object($resqlformula);
+					$stringofversion .= ($i > 0 ? ' / ' : '');
+					if ($obj) {
+						$stringofversion .= $obj->name.'='.$obj->version;
+					} else {
+						$stringofversion .= $langs->trans("Unknown");
+					}
+					$i++;
+				}
+
+				$object->version = $stringofversion;
+
+				if ($stringofversion && $stringofversion != $object->array_options['options_instanceversion']) {
+					$savetodo = 1;
+					$object->array_options['options_instanceversion'] = $stringofversion;	// Version has changed, we must save it.
+				}
+			} else {
+				setEventMessages('Failed to execute SQL: '.$newdb->lasterror(), null, 'warnings');
+				$error++;
+			}
+		}
+
+		if ($fordolibarr) {
+			// Set ->modulesenabled with list of enabled modules
+			$confinstance = new Conf();
+			$confinstance->setValues($newdb);
+			// Define $stringoflistofmodules
+			// TODO Put the definition in a sql into package after formula
+			$i=0;
+			foreach ($confinstance->global as $key => $val) {
+				if (preg_match('/^MAIN_MODULE_[^_]+$/', $key) && ! empty($val)) {
+					if ($i > 0) {
+						$stringoflistofmodules .= ', ';
+					}
+					$stringoflistofmodules .= preg_replace('/^MAIN_MODULE_/', '', $key);
+					$i++;
+				}
+			}
+
+			$object->modulesenabled = $stringoflistofmodules;
+
+			/* property not yet stored into database, so we don't persist it */
+			if ($stringoflistofmodules && $stringoflistofmodules != $object->array_options['options_instancemodules']) {
+				$savetodo = 1;
+				$object->array_options['options_instancemodules'] = $stringoflistofmodules;	// Version has changed, we must save it.
+			}
+		}
+
+		// Get other information from database
+		$other_informations = array();
+		$formula = '';
+		$sqltogetpackage = 'SELECT p.otherinformations_formula FROM '.$db->prefix().'packages as p, '.$db->prefix().'contratdet as cd, '.$db->prefix().'product_extrafields as pe';
+		$sqltogetpackage .= ' WHERE cd.fk_contrat = '.((int) $object->id);
+		$sqltogetpackage .= ' AND cd.fk_product = pe.fk_object';
+		$sqltogetpackage .= " AND pe.app_or_option = 'app'";
+		$sqltogetpackage .= ' AND pe.package = p.rowid';
+		$sqltogetpackage .= ' LIMIT 1';		// We should always have only one contract line with type 'app', so one line linked to a package with a version_formula.
+
+		$resqltogetpackage = $db->query($sqltogetpackage);
+		if ($resqltogetpackage) {
+			$obj = $db->fetch_object($resqltogetpackage);
+			if ($obj) {
+				$formula = $obj->otherinformations_formula;
+			}
+		} else {
+			setEventMessages('Failed to execute SQL: '.$db->lasterror(), null, 'warnings');
+			$error++;
+		}
+
+		if (preg_match('/SQL:/', $formula)) {
+			// Set $stringofversion with result of sql defined into formula to get version of instance. This sql must return a field "version" and a field "name" (name of version).
+			$formula = preg_replace('/SQL:/', '', $formula);
+			$formula = make_substitutions($formula, $substitarray);
+			$resqlformula = $newdb->query($formula);
+
+			if ($resqlformula) {
+				$num = $newdb->num_rows($resqlformula);
+
+				$i=0;
+				while ($i < $num) {
+					$obj = $newdb->fetch_object($resqlformula);
+					$other_informations[$obj->name] = $obj->value;
+					$i++;
+				}
+			} else {
+				setEventMessages('Failed to execute SQL: '.$newdb->lasterror(), null, 'warnings');
+				$error++;
+			}
+		}
+	}
+
+	// We have value that has changed, we saved them
+	if ($savetodo) {
+		$object->update($user, 1);
+	}
+
+	if ($error) {
+		return -1;
+	} else {
+		return array("lastloginadmin" => $lastloginadmin, "lastpassadmin" => $lastpassadmin, "other_informations"=>$other_informations);
+	}
 }

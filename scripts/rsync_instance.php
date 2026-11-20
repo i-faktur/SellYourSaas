@@ -77,7 +77,7 @@ if (empty($dolibarrdir)) {
 
 // Load Dolibarr environment
 $res=0;
-// Try master.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try master.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -100,7 +100,7 @@ if (! $res && file_exists("../../../master.inc.php")) {
 	$res=@include "../../../master.inc.php";
 }
 if (! $res) {
-	die("Include of master fails");
+	die("Include of master fails\n");
 }
 // After this $db, $mysoc, $langs, $conf and $hookmanager are defined (Opened $db handler to database will be closed at end of file).
 // $user is created but empty.
@@ -167,7 +167,13 @@ if (empty($db)) {
 if (empty($dirroot) || empty($instance) || empty($mode)) {
 	print "Update an instance on remote server with new ref version.\n";
 	print "Usage: $script_file source_root_dir sellyoursaas_instance (test|confirm|confirmunlock|diff|diffadd|diffchange|testclean|confirmclean|confirmwithtestdir)\n";
+	print "\n";
+	print $script_file." source_root_dir sellyoursaas_instance diff|diffadd|diffchange to compare current instance with target to update\n";
+	print $script_file." source_root_dir sellyoursaas_instance confirmclean to make update and clean old files not into new repository\n";
+	print $script_file." source_root_dir sellyoursaas_instance confirmwithtest to make update including the directory /test\n";
+
 	print "Return code: 0 if success, <>0 if error\n";
+	print "\n";
 	exit(-1);
 }
 
@@ -331,7 +337,7 @@ if ($mode == 'confirmunlock') {
 	if ($connection) {
 		//print $object->instance." ".$object->username_os." ".$object->password_os."<br>\n";
 		if (! @ssh2_auth_password($connection, $object->username_os, $object->password_os)) {
-			dol_syslog("Could not authenticate with username ".$username." . and password ".preg_replace('/./', '*', $password), LOG_ERR);
+			dol_syslog("Could not authenticate with username ".$object->username_os." . and password ".preg_replace('/./', '*', $object->password_os), LOG_ERR);
 			exit(-5);
 		} else {
 			$sftp = ssh2_sftp($connection);
@@ -379,6 +385,7 @@ if ($mode != 'test') {
 		$actioncomm->label = 'Upgrade from CLI rsync_instance.php, instance='.$instance.' dirroot='.$dirroot.' mode='.$mode;
 		$actioncomm->note_private = $actioncomm->label;
 		$actioncomm->fk_element = $object->id;
+		$actioncomm->elementid = $object->id;
 		$actioncomm->elementtype = 'contract';
 		$actioncomm->type_code = 'AC_OTH_AUTO';
 		$actioncomm->userassigned[$user->id] = array('id'=>$user->id);

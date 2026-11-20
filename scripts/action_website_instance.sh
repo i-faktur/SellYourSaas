@@ -14,22 +14,26 @@ export now=`date +'%Y-%m-%d %H:%M:%S'`
 echo
 echo
 echo "####################################### ${0} ${1}"
-echo "${0} ${@}"
+echo "${0} ${1} ... (other parameters not shown, they contain passwords)"
 echo "# user id --------> $(id -u)"
 echo "# now ------------> $now"
 echo "# PID ------------> ${$}"
-echo "# PWD ------------> $PWD" 
+echo "# PWD ------------> $PWD"
 #echo "# arguments ------> ${@}"
 echo "# parent path ----> ${0%/*}"
 echo "# realname name --> $(basename $(realpath ${0}))"
 echo "# realname dir ---> $(dirname $(realpath ${0}))"
 
 export PID=${$}
-export ZONES_PATH="/etc/bind/zones"
 export scriptdir=$(dirname $(realpath ${0}))
 
 # possibility to change the directory of vhostfile templates
 templatesdir=`grep '^templatesdir=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
+
+# php-fpm/apache open_basedir needs read access to the sellyoursaas module's own scripts/
+# directory (eg. for phpsendmail.php/phpsendmailprepend.php). Keep the trailing slash: an
+# open_basedir entry without one is a prefix, not a directory restriction.
+sellyoursaasscriptsdir="/home/admin/wwwroot/dolibarr_sellyoursaas/scripts/"
 if [[ "x$templatesdir" != "x" ]]; then
 	export vhostfile="$templatesdir/vhostHttps-sellyoursaas.template"
 	export vhostfilesuspended="$templatesdir/vhostHttps-sellyoursaas-suspended.template"
@@ -127,6 +131,8 @@ export VIRTUALHOSTHEAD=${35//£/ }
 if [ "x$VIRTUALHOSTHEAD" == "x-" ]; then
 	VIRTUALHOSTHEAD=""
 fi
+# Escape chars that have a special meaning in the replacement of a sed 's;;;' command, to avoid sed injection
+export VIRTUALHOSTHEADFORSED=$(printf '%s' "$VIRTUALHOSTHEAD" | tr -d '\r\n' | sed -e 's/[\\;&]/\\&/g')
 export ispaidinstance=${36}
 export SELLYOURSAAS_LOGIN_FOR_SUPPORT=${37}
 export directaccess=${38}
@@ -160,9 +166,9 @@ if [[ "x$webSSLCertificateIntermediate" == "x" ]]; then
 fi
 
 # possibility to change the path of sellyoursass directory
-olddoldataroot=`grep '^olddoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-newdoldataroot=`grep '^newdoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-if [[ "x$olddoldataroot" != "x" && "x$newdoldataroot" != "x" ]]; then
+olddoldataroot="/home/admin/wwwroot/dolibarr_documents"
+newdoldataroot=`grep '^doldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
+if [[ "x$newdoldataroot" != "x" ]]; then
 	fileforconfig1=${fileforconfig1/$olddoldataroot/$newdoldataroot}
 	dirwithdumpfile=${dirwithdumpfile/$olddoldataroot/$newdoldataroot}
 	dirwithsources1=${dirwithsources1/$olddoldataroot/$newdoldataroot}
@@ -171,6 +177,8 @@ if [[ "x$olddoldataroot" != "x" && "x$newdoldataroot" != "x" ]]; then
 	cronfile=${cronfile/$olddoldataroot/$newdoldataroot}
 	cliafter=${cliafter/$olddoldataroot/$newdoldataroot}
 fi
+
+export pathforcertiflocal="${newdoldataroot:-/home/admin/wwwroot/dolibarr_documents}/sellyoursaas_local/crt"
 
 # For debug
 echo `date +'%Y-%m-%d %H:%M:%S'`" input params for $0:"
@@ -183,11 +191,11 @@ echo "fileforconfig1 = $fileforconfig1"
 echo "targetdir = $targetdir"
 echo "EMAILTO = $EMAILTO"
 echo "REMOTEIP = $REMOTEIP"
-echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL" 
-echo "instancenameold = $instancenameold" 
+echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL"
+echo "instancenameold = $instancenameold"
 echo "domainnameold = $domainnameold"
 echo "customurl = $customurl"
-echo "contractlineid = $contractlineid" 
+echo "contractlineid = $contractlineid"
 echo "EMAILFROM = $EMAILFROM"
 echo "CERTIFFORCUSTOMDOMAIN = $CERTIFFORCUSTOMDOMAIN"
 echo "archivedir = $archivedir"
@@ -211,10 +219,23 @@ echo "instancedir = $instancedir"
 testorconfirm="confirm"
 
 
-# Create / Remove the virtual hostinto available dir. 
+# Create / Remove the virtual hostinto available dir.
 # Create/Disable Apache virtual host
 
 if [[ "$mode" == "deploywebsite" ]]; then
+
+	# Refuse to enable a vhost for a hostname already served by another enabled vhost (lock released at script exit)
+	#exec 9>/run/lock/sellyoursaas-vhost.lock
+	#flock -x 9
+	#for hostnametocheck in $CUSTOMDOMAIN www.$CUSTOMDOMAIN; do
+	#	for enabledconf in /etc/apache2/sellyoursaas-online/*.conf; do
+	#		[[ -e "$enabledconf" && "$enabledconf" != "/etc/apache2/sellyoursaas-online/$fqn.website-$CUSTOMDOMAIN.conf" ]] || continue
+	#		if awk -v requested="${hostnametocheck,,}" 'tolower($1) == "servername" || tolower($1) == "serveralias" { for (i = 2; i <= NF; i++) { h = tolower($i); sub(/:[0-9]+$/, "", h); if (h == requested) found = 1 } } END { exit(found ? 0 : 1) }' "$enabledconf"; then
+	#			echo "Error: hostname $hostnametocheck is already used by the enabled virtual host $enabledconf"
+	#			exit 79
+	#		fi
+	#	done
+	#done
 
 	export apacheconf="/etc/apache2/sellyoursaas-available/$instancename.$domainname.website-$CUSTOMDOMAIN.conf"
 	echo `date +'%Y-%m-%d %H:%M:%S'`" ***** Create apache conf $apacheconf from $vhostfilewebsite"
@@ -242,7 +263,9 @@ if [[ "$mode" == "deploywebsite" ]]; then
 			  sed -e 's;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g' | \
 			  sed -e 's;#ErrorLog;$ErrorLog;g' | \
 			  sed -e 's;__webMyAccount__;$SELLYOURSAAS_ACCOUNT_URL;g' | \
-			  sed -e 's;__webAppPath__;$instancedir;g' > $apacheconf"
+			  sed -e 's;__webAppPath__;$instancedir;g' | \
+			  sed -e 's;__sellyoursaasLocalCrtPath__;$pathforcertiflocal;g' | \
+			  sed -e 's;__sellyoursaasScriptsPath__;$sellyoursaasscriptsdir;g' > $apacheconf"
 	cat $vhostfilewebsite | sed -e "s/__webSiteDomain__/$CUSTOMDOMAIN/g" | \
 			  sed -e "s/__webSiteAliases__/$CUSTOMDOMAIN www.$CUSTOMDOMAIN/g" | \
 			  sed -e "s/__webSiteNamePath__/$WEBSITENAME/g" | \
@@ -256,20 +279,22 @@ if [[ "$mode" == "deploywebsite" ]]; then
 			  sed -e "s/__osUsername__/$osusername/g" | \
 			  sed -e "s/__osGroupname__/$osusername/g" | \
 			  sed -e "s;__osUserPath__;$targetdir/$osusername/$dbname;g" | \
-			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEAD;g" | \
+			  sed -e "s;__VirtualHostHead__;$VIRTUALHOSTHEADFORSED;g" | \
 			  sed -e "s;__AllowOverride__;$ALLOWOVERRIDE;g" | \
 			  sed -e "s;__IncludeFromContract__;$INCLUDEFROMCONTRACT;g" | \
 			  sed -e "s;__SELLYOURSAAS_LOGIN_FOR_SUPPORT__;$SELLYOURSAAS_LOGIN_FOR_SUPPORT;g" | \
 			  sed -e "s;#ErrorLog;$ErrorLog;g" | \
 			  sed -e "s;__webMyAccount__;$SELLYOURSAAS_ACCOUNT_URL;g" | \
-			  sed -e "s;__webAppPath__;$instancedir;g" > $apacheconf
+			  sed -e "s;__webAppPath__;$instancedir;g" | \
+			  sed -e "s;__sellyoursaasLocalCrtPath__;$pathforcertiflocal;g" | \
+			  sed -e "s;__sellyoursaasScriptsPath__;$sellyoursaasscriptsdir;g" > $apacheconf
 	export vhostko=$?
-	
+
 	echo `date +'%Y-%m-%d %H:%M:%S'`" Result of generation of file $apacheconf = $vhostko"
 
 	#echo Enable conf with a2ensite $instance.$domain.website-$CUSTOMDOMAIN.conf
 	#a2ensite $instance.$domain.website-$CUSTOMDOMAIN.conf
-	echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$instancename.$domainname.website-$CUSTOMDOMAIN.conf /etc/apache2/sellyoursaas-online 
+	echo Enable conf with ln -fs /etc/apache2/sellyoursaas-available/$instancename.$domainname.website-$CUSTOMDOMAIN.conf /etc/apache2/sellyoursaas-online
 	ln -fs /etc/apache2/sellyoursaas-available/$instancename.$domainname.website-$CUSTOMDOMAIN.conf /etc/apache2/sellyoursaas-online
 
 
@@ -277,7 +302,7 @@ if [[ "$mode" == "deploywebsite" ]]; then
 	service apache2 reload
 	if [[ "x$?" != "x0" ]]; then
 		echo Error when running service apache2 reload
-		echo "Failed to restart apache to validate the new virtual host $apacheconf: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in apache reload to enable a new website" $EMAILTO 
+		echo "Failed to restart apache to validate the new virtual host $apacheconf: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in apache reload to enable a new website" $EMAILTO
 		sleep 1
 		exit 20
 	else
@@ -285,8 +310,8 @@ if [[ "$mode" == "deploywebsite" ]]; then
 	fi
 
 
-	echo "Create cert directory with mkdir /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/; chown admin:admin /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/;"
-	mkdir /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/; chown admin:admin /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/;
+	echo "Create cert directory with mkdir -p $pathforcertiflocal/; chown admin:admin $pathforcertiflocal/;"
+	mkdir -p $pathforcertiflocal/; chown admin:admin $pathforcertiflocal/;
 
 	if [[ ${46} == www.* ]]; then
 		echo certbot certonly -n -v --webroot -w $instancedir/documents/website/$WEBSITENAME -d www.$CUSTOMDOMAIN
@@ -297,30 +322,30 @@ if [[ "$mode" == "deploywebsite" ]]; then
 		certbot certonly -n -v --webroot -w $instancedir/documents/website/$WEBSITENAME -d www.$CUSTOMDOMAIN -d $CUSTOMDOMAIN
 		export certko=$?
 	fi
-	
-	echo `date +'%Y-%m-%d %H:%M:%S'`" Result of generation of cert file = $certko"
-	
-	
-	echo "Link certificate for virtualhost with
-		ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/privkey.pem /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$instancename.$domainname-$CUSTOMDOMAIN.key
-		ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/cert.pem /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$instancename.$domainname-$CUSTOMDOMAIN.crt
-		ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/fullchain.pem /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$instancename.$domainname-$CUSTOMDOMAIN-intermediate.crt
-	"
-	ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/privkey.pem /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$instancename.$domainname-$CUSTOMDOMAIN.key
-	ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/cert.pem /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$instancename.$domainname-$CUSTOMDOMAIN.crt
-	ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/fullchain.pem /home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/crt/$instancename.$domainname-$CUSTOMDOMAIN-intermediate.crt
-	
 
-	echo `date +'%Y-%m-%d %H:%M:%S'`" Restart apache to have the new certificate beeing loaded"
+	echo `date +'%Y-%m-%d %H:%M:%S'`" Result of generation of cert file = $certko"
+
+
+	echo "Link certificate for virtualhost with
+		ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/privkey.pem $pathforcertiflocal/$instancename.$domainname-$CUSTOMDOMAIN.key
+		ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/cert.pem $pathforcertiflocal/$instancename.$domainname-$CUSTOMDOMAIN.crt
+		ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/fullchain.pem $pathforcertiflocal/$instancename.$domainname-$CUSTOMDOMAIN-intermediate.crt
+	"
+	ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/privkey.pem $pathforcertiflocal/$instancename.$domainname-$CUSTOMDOMAIN.key
+	ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/cert.pem $pathforcertiflocal/$instancename.$domainname-$CUSTOMDOMAIN.crt
+	ln -fs /etc/letsencrypt/live/www.$CUSTOMDOMAIN/fullchain.pem $pathforcertiflocal/$instancename.$domainname-$CUSTOMDOMAIN-intermediate.crt
+
+
+	echo `date +'%Y-%m-%d %H:%M:%S'`" Restart apache to have the new certificate being loaded"
 	service apache2 reload
 	if [[ "x$?" != "x0" ]]; then
 		echo Error when running service apache2 reload
-		echo "Failed to restart apache to validate the new virtual host $apacheconf: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in apache reload to enable a new website" $EMAILTO 
+		echo "Failed to restart apache to validate the new virtual host $apacheconf: Error when running service apache2 reload" | mail -aFrom:$EMAILFROM -s "[Alert] Pb in apache reload to enable a new website" $EMAILTO
 		sleep 1
 		exit 20
 	else
 		sleep 3
-	fi	
+	fi
 fi
 
 if [ "x$vhostko" != "x0" ] || [ "x$certko" != "x0" ]; then
@@ -328,7 +353,7 @@ if [ "x$vhostko" != "x0" ] || [ "x$certko" != "x0" ]; then
 	sleep 1
 	echo `date +'%Y-%m-%d %H:%M:%S'`" return 50"
 	echo
-	
+
 	exit 50
 fi
 

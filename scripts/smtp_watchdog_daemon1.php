@@ -70,7 +70,7 @@ if ($fp) {
 		if ($tmpline[0] == 'maxemailperdaypaid') {
 			$maxemailperdaypaid = $tmpline[1];
 		}
-		if ($tmpline[0] == 'pathtospamdir') {
+		if ($tmpline[0] == 'pathtospamdir' && !empty($tmpline[1])) {
 			$pathtospamdir = $tmpline[1];
 		}
 	}
@@ -123,7 +123,7 @@ if (empty($EMAILTO)) {
 
 // Load Dolibarr environment
 $res=0;
-// Try master.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try master.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -155,21 +155,26 @@ if (! $res && file_exists($dolibarrdir."/htdocs/master.inc.php")) {
 	$res=@include $dolibarrdir."/htdocs/master.inc.php";
 }
 if (! $res) {
-	print("Include of master fails");
+	print("Include of master fails\n");
 	exit(-1);
 }
 // After this $db, $mysoc, $langs, $conf and $hookmanager are defined (Opened $db handler to database will be closed at end of file).
 // $user is created but empty.
-
+/**
+ * @var DoliDB $db
+ *
+ * @var string $dolibarr_main_restrict_os_commands
+ */
 include_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/lib/geturl.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/class/utils.class.php';
 
+$dolibarr_main_restrict_os_commands = ($dolibarr_main_restrict_os_commands ? $dolibarr_main_restrict_os_commands.', find, grep, ps, awk, ss, lynx, netstat, tail, cut' : '');
 
 
 file_put_contents($logfile, date('Y-m-d H:i:s') . " **** $script_file started\n", FILE_APPEND);
-file_put_contents($logfile, date('Y-m-d H:i:s') . " Try to detect a smtp connexion from $WDLOGFILE and log who do it\n", FILE_APPEND);
+file_put_contents($logfile, date('Y-m-d H:i:s') . " Try to detect a smtp connection from $WDLOGFILE and log who do it\n", FILE_APPEND);
 
 if (empty($MAXPERDAY)) {
 	$MAXPERDAY=1000;
@@ -183,9 +188,6 @@ if (empty($EMAILFROM)) {
 if (empty($EMAILTO)) {
 	$EMAILTO='supervision@'.$DOMAIN;
 }
-if (empty($pathtospamdir)) {
-	$pathtospamdir="/tmp/spam";
-}
 
 $PID=getmypid();
 $scriptdir=dirname(__FILE__);
@@ -197,10 +199,10 @@ file_put_contents($logfile, date('Y-m-d H:i:s') . " PID=$PID\n", FILE_APPEND);
 file_put_contents($logfile, date('Y-m-d H:i:s') . " Now event captured will be logged into ".$logphpsendmail."\n", FILE_APPEND);
 
 // Load $instanceofuser
-$instanceofuser = getInstancesOfUser($pathtospamdir);
+$instanceofuser = getInstancesOfUser($pathtospamdir, $logfile);
 
 // Load $blacklistips
-$blacklistips = getBlackListIps($pathtospamdir);
+$blacklistips = getBlackListIps($pathtospamdir, $logfile);
 
 $datelastload = dol_now();
 
@@ -249,13 +251,14 @@ while (!feof($handle)) {
 
 
 	if ($datelastload < (dol_now() - 3600)) {
-		file_put_contents($logfile, date('Y-m-d H:i:s') . " reload cached files\n", FILE_APPEND);
+		file_put_contents($logfile, date('Y-m-d H:i:s') . " reload cached files (at least once per hour)\n", FILE_APPEND);
+		file_put_contents($logphpsendmail, date('Y-m-d H:i:s') . " reload cached files (at least once per hour)\n", FILE_APPEND);
 
 		// Call this sometimes to refresh list of paid instances
-		$instanceofuser = getInstancesOfUser($pathtospamdir);
+		$instanceofuser = getInstancesOfUser($pathtospamdir, $logfile);
 
 		// Call this sometimes to refresh list of black listed IPs
-		$blacklistips = getBlackListIps($pathtospamdir);
+		$blacklistips = getBlackListIps($pathtospamdir, $logfile);
 
 		$datelastload = dol_now();
 	}
@@ -475,7 +478,7 @@ while (!feof($handle)) {
 					}
 				}
 
-				file_put_contents($logphpsendmail, date('Y-m-d H:i:s') . " Nb of processes found with ".$commandresexec." = ".$resexec." (we accept ".$MAXALLOWED.")\n", FILE_APPEND);
+				file_put_contents($logphpsendmail, date('Y-m-d H:i:s') . " Nb of processes found with ".$commandresexec." = ".$resexec." (we accept mailquota ".$MAXALLOWED." - MAXPERDAY=".$MAXPERDAY." - MAXPERDAYPAID=".$MAXPERDAYPAID.")\n", FILE_APPEND);
 
 				if ($resexec > $MAXALLOWED) {
 					file_put_contents($logphpsendmail, date('Y-m-d H:i:s') . " $remoteip sellyoursaas rules ko quota reached. User has reached its quota of ".$MAXALLOWED."\n", FILE_APPEND);
@@ -541,10 +544,13 @@ pclose($handle);
  * getInstancesOfUser()
  *
  * @param	string	$pathtospamdir		Spam directory
+ * @param	string	$logfile			File name for log
  * @return	array						Array of instances in mailquota (so paid instances). Key is osu... user. Value is an array.
  */
-function getInstancesOfUser($pathtospamdir)
+function getInstancesOfUser($pathtospamdir, $logfile)
 {
+	file_put_contents($logfile, date('Y-m-d H:i:s') . " Load file with mail quota ".$pathtospamdir."/mailquota\n", FILE_APPEND);
+
 	$instanceofuser = array();
 	// Loop on each line of $pathtospamdir/mailquota
 	$fp = @fopen($pathtospamdir."/mailquota", "r");
@@ -567,10 +573,13 @@ function getInstancesOfUser($pathtospamdir)
  * getBlackListIps()
  *
  * @param	string	$pathtospamdir		Spam directory
+ * @param	string	$logfile			File name for log
  * @return	array						Array of blacklisted IPs. Key and value are the IP.
  */
-function getBlackListIps($pathtospamdir)
+function getBlackListIps($pathtospamdir, $logfile)
 {
+	file_put_contents($logfile, date('Y-m-d H:i:s') . " Load file with list of IP ".$pathtospamdir."/blaklistip\n", FILE_APPEND);
+
 	$blacklistips = array();
 	// Loop on each line of $pathtospamdir/mailquota
 	$fp = @fopen($pathtospamdir."/blacklistip", "r");

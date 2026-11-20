@@ -23,6 +23,7 @@
  */
 require_once DOL_DOCUMENT_ROOT."/core/class/commonobject.class.php";
 require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture-rec.class.php';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/security2.lib.php';
 dol_include_once('sellyoursaas/lib/sellyoursaas.lib.php');
 dol_include_once('sellyoursaas/class/deploymentserver.class.php');
 
@@ -76,7 +77,7 @@ class ActionsSellyoursaas
 
 
 	/**
-	 *    Return URL formated
+	 *    Return URL formatted
 	 *
 	 *    @param	array			$parameters		Array of parameters
 	 *    @param	CommonObject    $object         The object to process (an invoice if you are in invoice module, a propale in propale's module, etc...)
@@ -119,8 +120,14 @@ class ActionsSellyoursaas
 						}
 					}
 
-					$dol_login_hash=dol_hash(getDolGlobalString('SELLYOURSAAS_KEYFORHASH').$object->email.dol_print_date(dol_now(), 'dayrfc'), 5);	// hash to login is sha256 and is valid one day
-					$url=$urlmyaccount.'?mode=logout_dashboard&action=login&token='.newToken().'&actionlogin=login&username='.urlencode(empty($object->email) ? '' : $object->email).'&password=&login_hash='.urlencode($dol_login_hash);
+					$magiclinkkey = getDolGlobalString('SELLYOURSAAS_KEYFORHASH');
+					if (dol_strlen($magiclinkkey) >= 32) {
+						$dol_login_hash=dol_hash($magiclinkkey.$object->email.dol_print_date(dol_now(), 'dayrfc'), 5);	// hash to login is sha256 and is valid one day
+						$url=$urlmyaccount.'?mode=logout_dashboard&action=login&token='.newToken().'&actionlogin=login&username='.urlencode(empty($object->email) ? '' : $object->email).'&password=&login_hash='.urlencode($dol_login_hash);
+					} else {
+						// No magic login link without a strong secret key
+						$url=$urlmyaccount.'?mode=logout_dashboard&username='.urlencode(empty($object->email) ? '' : $object->email);
+					}
 				}
 
 				$this->resprints = '';
@@ -133,12 +140,14 @@ class ActionsSellyoursaas
 
 				if (!empty($parameters['getnomurl'])) {
 					if (!empty($tmparray['options_spammer'])) {
+						$langs->load("sellyoursaas@sellyoursaas");
 						$this->resprints = $this->resprints.img_picto($langs->trans("EvilInstance"), 'fa-book-dead', 'class="pictofixedwidth"').$parameters['getnomurl'];
 					} else {
 						$this->resprints = $this->resprints.$parameters['getnomurl'];
 					}
 				} else {
 					if (!empty($tmparray['options_spammer'])) {
+						$langs->load("sellyoursaas@sellyoursaas");
 						$this->resprints .= img_picto($langs->trans("EvilInstance"), 'fa-book-dead', 'class="pictofixedwidth"');
 					}
 				}
@@ -169,6 +178,7 @@ class ActionsSellyoursaas
 				$this->resprints = preg_replace('/title="([^"]+)"/', 'title="'.$newtitle.'"', $parameters['getnomurl']);
 
 				if (!empty($tmparray['options_spammer'])) {
+					$langs->load("sellyoursaas@sellyoursaas");
 					$this->resprints = img_picto($langs->trans("EvilInstance"), 'fa-book-dead', 'class="pictofixedwidth"').$this->resprints;
 				}
 
@@ -180,7 +190,7 @@ class ActionsSellyoursaas
 	}
 
 	/**
-	 *    Return ref customer formated
+	 *    Return ref customer formatted
 	 *
 	 *    @param	array			$parameters		Array of parameters
 	 *    @param	CommonObject    $object         The object to process (an invoice if you are in invoice module, a propale in propale's module, etc...)
@@ -191,7 +201,7 @@ class ActionsSellyoursaas
 	 */
 	public function getFormatedCustomerRef($parameters, &$object, &$action)
 	{
-		global $langs;
+		global $conf, $langs;
 
 		if (! empty($parameters['objref'])) {
 			$isanurlofasellyoursaasinstance=false;
@@ -204,8 +214,12 @@ class ActionsSellyoursaas
 					}
 				}
 			} else {
-				$staticdeploymentserver = new Deploymentserver($this->db);
-				$tmparray = $staticdeploymentserver->fetchAllDomains();
+				// Cache the list of domains, this hook is called for each line of lists
+				if (!isset($conf->cache['sellyoursaas_alldomains'])) {
+					$staticdeploymentserver = new Deploymentserver($this->db);
+					$conf->cache['sellyoursaas_alldomains'] = $staticdeploymentserver->fetchAllDomains();
+				}
+				$tmparray = $conf->cache['sellyoursaas_alldomains'];
 				foreach ($tmparray as $tmp) {
 					$newtmp = preg_replace('/:.*$/', '', $tmp);
 					if (preg_match('/'.preg_quote('.'.$newtmp, '/').'$/', $parameters['objref'])) {
@@ -233,10 +247,12 @@ class ActionsSellyoursaas
 						$this->results['objref'] .= ' &nbsp; <a href="/aa">'.$langs->trans("SeeChain").'</a>';
 					}*/
 					if (!empty($object->array_options['options_spammer'])) {
+						$langs->load("sellyoursaas@sellyoursaas");
 						$this->results['objref'] = img_picto($langs->trans("EvilInstance"), 'fa-book-dead', 'class="paddingleft"').' '.$this->results['objref'];
 					}
 
 					if (!empty($object->array_options['options_spammer']) && $object->array_options['options_deployment_status'] == 'done') {
+						$langs->load("sellyoursaas@sellyoursaas");
 						$this->results['objref'] = img_warning($langs->trans('ActiveInstanceOfASpammer')).' '.$this->results['objref'];
 					}
 				}
@@ -427,14 +443,35 @@ class ActionsSellyoursaas
 				}
 
 				if (! $error) {
+					// deployall recreates the admin user from scratch, so it always needs a real password to set, not
+					// just one to display. options_deployment_init_adminpass is emptied once the very first deploy is
+					// marked done (see register_instance.php, "Clear password, we don't need it anymore"), unless
+					// SELLYOURSAAS_KEEP_INIT_ADMINPASS is set - so on every later Redeploy from this card, this field
+					// is expected to already be empty when that constant is off. Generate a fresh password here
+					// instead of silently sending an empty string as the new admin password. If the constant is on,
+					// the field finding itself empty anyway is not the expected case, so leave it alone rather than
+					// paper over it - that configuration means the real password should always be known/kept.
+					$adminpassforredeploy = $object->array_options['options_deployment_init_adminpass'];
+					$generatedadminpassforredeploy = false;
+					if (empty($adminpassforredeploy) && !getDolGlobalString('SELLYOURSAAS_KEEP_INIT_ADMINPASS')) {
+						$adminpassforredeploy = substr(getRandomPassword(true, array('I')), 0, 9);
+						$generatedadminpassforredeploy = true;
+					}
+
 					dol_include_once('sellyoursaas/class/sellyoursaasutils.class.php');
 					$sellyoursaasutils = new SellYourSaasUtils($db);
-					$result = $sellyoursaasutils->sellyoursaasRemoteAction('deployall', $object, 'admin', $object->thirdparty->email, $object->array_options['options_deployment_init_adminpass'], '0', 'Deploy from contract card', 300);
+					$result = $sellyoursaasutils->sellyoursaasRemoteAction('deployall', $object, 'admin', $object->thirdparty->email, $adminpassforredeploy, '0', 'Deploy from contract card', 300);
 					if ($result <= 0) {
 						$error++;
 						$this->error=$sellyoursaasutils->error;
 						$this->errors=$sellyoursaasutils->errors;
 						setEventMessages($this->error, $this->errors, 'errors');
+					} elseif ($generatedadminpassforredeploy) {
+						// Store it back so it is not lost, and show it once: this is the only place it is recorded now,
+						// there is no email sent for it (the customer chooses their own password on first registration).
+						$object->array_options['options_deployment_init_adminpass'] = $adminpassforredeploy;
+						$object->insertExtraFields();
+						setEventMessages($langs->trans('SellYourSaasNewAdminPasswordAfterRedeploy', $adminpassforredeploy), null, 'warnings');
 					}
 				}
 
@@ -661,7 +698,7 @@ class ActionsSellyoursaas
 						setEventMessages($langs->trans("ResourceComputed"), null, 'mesgs');
 					}
 					if ($action == 'refreshfilesonly') {
-						setEventMessages($langs->trans("ResourceComputed"), null, 'mesgs');
+						setEventMessages($langs->trans("FilesStatusComputed"), null, 'mesgs');
 					}
 					if ($action == 'recreateauthorizedkeys') {
 						setEventMessages($langs->trans("FileCreated"), null, 'mesgs');
@@ -671,6 +708,69 @@ class ActionsSellyoursaas
 					}
 					if ($action == 'deletelock') {
 						setEventMessages($langs->trans("FilesDeleted"), null, 'mesgs');
+					}
+				}
+			}
+			if ($action == 'reset_einvoicingconf') {
+				$type_db = $conf->db->type;
+
+				$instance = $object->ref_customer;
+				$hostname_db = $object->array_options['options_hostname_db'];
+				$username_db = $object->array_options['options_username_db'];
+				$password_db = $object->array_options['options_password_db'];
+				$database_db = $object->array_options['options_database_db'];
+				$port_db     = $object->array_options['options_port_db'];
+				$username_os = $object->array_options['options_username_os'];
+				$password_os = $object->array_options['options_password_os'];
+				$hostname_os = $object->array_options['options_hostname_os'];
+				$newdb = getDoliDBInstance($type_db, $hostname_db, $username_db, $password_db, $database_db, $port_db);
+				$newdb->prefix_db = $prefix_db;
+				$substitarray = array(
+					'__INSTANCEDBPREFIX__' => $prefix_db
+				);
+
+				if (is_object($newdb) && $newdb->connected) {
+					$formula = '';
+					$sqltogetpackage = 'SELECT p.sqltoupdateeinvoiceconst FROM '.$db->prefix().'packages as p, '.$db->prefix().'contratdet as cd, '.$db->prefix().'product_extrafields as pe';
+					$sqltogetpackage .= ' WHERE cd.fk_contrat = '.((int) $object->id);
+					$sqltogetpackage .= ' AND cd.fk_product = pe.fk_object';
+					$sqltogetpackage .= " AND pe.app_or_option = 'app'";
+					$sqltogetpackage .= ' AND pe.package = p.rowid';
+					$sqltogetpackage .= ' LIMIT 1';		// We should always have only one contract line with type 'app', so one line linked to a package with a version_formula.
+
+					$resqltogetpackage = $db->query($sqltogetpackage);
+					if ($resqltogetpackage) {
+						$obj = $db->fetch_object($resqltogetpackage);
+						if ($obj) {
+							$formula = $obj->sqltoupdateeinvoiceconst;
+						}
+					} else {
+						setEventMessages('Failed to execute SQL: '.$db->lasterror(), null, 'warnings');
+						$error++;
+					}
+					if (!empty($formula)) {
+						$newdb->begin();
+						$formula = make_substitutions($formula, $substitarray);
+						$formula = trim($formula);
+						$arrayofsql=explode(';', $formula);
+						foreach ($arrayofsql as $sqltoexecuteline) {
+							$sqltoexecuteline = trim($sqltoexecuteline);
+							if ($sqltoexecuteline && (strpos($sqltoexecuteline, '--') === false || strpos($sqltoexecuteline, '--') > 0)) {
+								dol_syslog("Execute sql=".$sqltoexecuteline);
+								$resql = $newdb->query($sqltoexecuteline);
+								if (!$resql) {
+									$error++;
+								}
+							}
+						}
+						if (!$error) {
+							setEventMessages($langs->trans("EInvoicingConfUpdated"), null, 'mesgs');
+							$newdb->commit();
+						} else {
+							setEventMessages('Failed to execute SQL: '.$newdb->lasterror(), null, 'warnings');
+							$newdb->rollback();
+							$error++;
+						}
 					}
 				}
 			}
@@ -925,7 +1025,7 @@ class ActionsSellyoursaas
 								$blacklistip->status = Blacklistip::STATUS_ENABLED;
 								$blacklistip->date_use = $tmpcontract->array_options['options_deployment_date_start'];
 								$blacklistip->content = $tmpcontract->array_options['options_deployment_ip'];
-								$blacklistip->comment = "Flagged as Spammer (from a massaction in the backoffice by ".$user->login."), after manual analyzis of the user activity";
+								$blacklistip->comment = "Flagged as Spammer (from a massaction in the backoffice by ".$user->login."), after manual analysis of the user activity";
 
 								$result2 = $blacklistip->create($user);
 								if ($result2 <= 0) {
@@ -1096,22 +1196,22 @@ class ActionsSellyoursaas
 						// nbofserviceswait, nbofservicesopened, nbofservicesexpired and nbofservicesclosed
 						if (! $object->nbofservicesclosed) {
 							$daysafterexpiration = getDolGlobalString('SELLYOURSAAS_NBDAYS_AFTER_EXPIRATION_BEFORE_PAID_SUSPEND');
-							$ret.='<span class="badge2 small marginleftonly valignmiddle inline-block" title="Expiration = Date planed for end of service">Paid services will be suspended<br>'.$daysafterexpiration.' days after expiration.</span>';
+							$ret.='<span class="badge2 small marginleftonly valignmiddle inline-block" title="Expiration = Date planned for end of service">Paid services will be suspended<br>'.$daysafterexpiration.' days after expiration.</span>';
 						}
 						if ($object->nbofservicesclosed) {
 							$daysafterexpiration = getDolGlobalString('SELLYOURSAAS_NBDAYS_AFTER_EXPIRATION_BEFORE_PAID_UNDEPLOYMENT');
-							$ret.='<span class="badge2 small marginleftonly valignmiddle inline-block" title="Expiration = Date planed for end of service">Paid instance will be undeployed<br>'.$daysafterexpiration.' days after expiration.</span>';
+							$ret.='<span class="badge2 small marginleftonly valignmiddle inline-block" title="Expiration = Date planned for end of service">Paid instance will be undeployed<br>'.$daysafterexpiration.' days after expiration.</span>';
 						}
 					} else {
 						$ret .= '<span class="badge badge-status5 badge-status valignmiddle inline-block" style="font-size: 1em">'.$langs->trans("TrialMode").'</span>';
 						// nbofserviceswait, nbofservicesopened, nbofservicesexpired and nbofservicesclosed
 						if (! $object->nbofservicesclosed) {
 							$daysafterexpiration = getDolGlobalString('SELLYOURSAAS_NBDAYS_AFTER_EXPIRATION_BEFORE_TRIAL_SUSPEND');
-							$ret.='<span class="badge2 small marginleftonly valignmiddle inline-block" title="Expiration = Date planed for end of service">Test services will be suspended<br>'.$daysafterexpiration.' days after expiration.</span>';
+							$ret.='<span class="badge2 small marginleftonly valignmiddle inline-block" title="Expiration = Date planned for end of service">Test services will be suspended<br>'.$daysafterexpiration.' days after expiration.</span>';
 						}
 						if ($object->nbofservicesclosed) {
 							$daysafterexpiration = getDolGlobalString('SELLYOURSAAS_NBDAYS_AFTER_EXPIRATION_BEFORE_TRIAL_UNDEPLOYMENT');
-							$ret.='<span class="badge2 small marginleftonly valignmiddle inline-block" title="Expiration = Date planed for end of service">Test instance will be undeployed<br>'.$daysafterexpiration.' days after expiration.</span>';
+							$ret.='<span class="badge2 small marginleftonly valignmiddle inline-block" title="Expiration = Date planned for end of service">Test instance will be undeployed<br>'.$daysafterexpiration.' days after expiration.</span>';
 						}
 					}
 				}
@@ -1271,6 +1371,30 @@ class ActionsSellyoursaas
 
 
 	/**
+	 * Complete SQL by adding fields in SELECT
+	 *
+	 * @param	array	$parameters		Array of parameters
+	 * @param	object	$object			Object
+	 * @return	int						0
+	 */
+	public function printFieldListSelect($parameters, &$object)
+	{
+		global $contextpage;
+
+		if ($parameters['currentcontext'] == 'contractlist' && in_array($contextpage, array('sellyoursaasinstances','sellyoursaasinstancesvtwo'))) {
+			if (!getDolGlobalString('SELLYOURSAAS_DISABLE_TRIAL_OR_PAID')) {
+				// Count invoices and template invoices linked to the contract (same test than sellyoursaasIsPaidInstance() with mode 0)
+				$this->resprints = ", (SELECT COUNT(ees.rowid) FROM ".$this->db->prefix()."element_element as ees";
+				$this->resprints .= " WHERE ees.fk_source = c.rowid AND ees.sourcetype = 'contrat' AND ees.targettype IN ('facture', 'facturerec'))";
+				$this->resprints .= " + (SELECT COUNT(eet.rowid) FROM ".$this->db->prefix()."element_element as eet";
+				$this->resprints .= " WHERE eet.fk_target = c.rowid AND eet.targettype = 'contrat' AND eet.sourcetype IN ('facture', 'facturerec')) as sellyoursaas_nblinkedinvoices";
+			}
+		}
+
+		return 0;
+	}
+
+	/**
 	 * Complete SQL by adding tables in FROM
 	 *
 	 * @param	array	$parameters		Array of parameters
@@ -1307,7 +1431,7 @@ class ActionsSellyoursaas
 				print_liste_field_titre("TrialOrPaid", $_SERVER["PHP_SELF"], '', '', $param, ' align="center"', $sortfield, $sortorder);
 			}
 			if (!getDolGlobalString('SELLYOURSAAS_DISABLE_PAYMENT_MODE_SAVED')) {
-				print_liste_field_titre("PaymentModeSaved", $_SERVER["PHP_SELF"], '', '', $param, ' align="center"', $sortfield, $sortorder);
+				print_liste_field_titre("PaymentModeRecorded", $_SERVER["PHP_SELF"], '', '', $param, ' align="center"', $sortfield, $sortorder);
 			}
 		}
 		if ($parameters['currentcontext'] == 'thirdpartybancard') {
@@ -1351,7 +1475,7 @@ class ActionsSellyoursaas
 	 */
 	public function printFieldListValue($parameters, &$object)
 	{
-		global $langs;
+		global $conf, $langs;
 		global $db;
 		global $contextpage;
 
@@ -1370,7 +1494,11 @@ class ActionsSellyoursaas
 						dol_include_once('sellyoursaas/lib/sellyoursaas.lib.php');
 
 						$ret = '<div class="bold">';
-						$ispaid = sellyoursaasIsPaidInstance($contractmpforloop);	// This call fetchObjectLinked
+						if (isset($parameters['obj']->sellyoursaas_nblinkedinvoices)) {	// Value loaded by the hook printFieldListSelect
+							$ispaid = ($parameters['obj']->sellyoursaas_nblinkedinvoices > 0 ? 1 : 0);
+						} else {
+							$ispaid = sellyoursaasIsPaidInstance($contractmpforloop);	// This call fetchObjectLinked
+						}
 						if ($ispaid) {
 							if (getDolGlobalString("SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE")) {
 								$ret .= '<span class="badge badge-status4" style="font-size: 1em;">'.$langs->trans("PayedOrConfirmedMode").'</span>';
@@ -1392,7 +1520,12 @@ class ActionsSellyoursaas
 				if (!empty($parameters['obj']->options_deployment_status)) {
 					dol_include_once('sellyoursaas/lib/sellyoursaas.lib.php');
 
-					$atleastonepaymentmode = sellyoursaasThirdpartyHasPaymentMode($parameters['obj']->socid);
+					// Cache the result per thirdparty, because a thirdparty can have several contracts in the list
+					$socidforcache = (int) $parameters['obj']->socid;
+					if (!isset($conf->cache['sellyoursaas_thirdpartyhaspaymentmode'][$socidforcache])) {
+						$conf->cache['sellyoursaas_thirdpartyhaspaymentmode'][$socidforcache] = sellyoursaasThirdpartyHasPaymentMode($socidforcache);
+					}
+					$atleastonepaymentmode = $conf->cache['sellyoursaas_thirdpartyhaspaymentmode'][$socidforcache];
 
 					if ($atleastonepaymentmode) {
 						print $langs->trans("Yes");
@@ -1574,7 +1707,7 @@ class ActionsSellyoursaas
 				$nbtotalofrecords = $objforcount->nbtotalofrecords;
 				$db->free($resql);
 			} else {
-			    dol_print_error($db);
+				dol_print_error($db);
 			}
 
 			if (!getDolGlobalString('SELLYOURSAAS_OBJECT_DEPLOYMENT_SERVER_MIGRATION')) {
@@ -1635,7 +1768,7 @@ class ActionsSellyoursaas
 	 * @param   HookManager     $hookmanager    Hook manager propagated to allow calling another hook
 	 * @return  int 		      			  	=0
 	 */
-	public function completeFieldsToSearchAll($parameters, $object, $action, $aa)
+	public function completeFieldsToSearchAll($parameters, $object, $action, $hookmanager)
 	{
 		if ($object->element == 'societe') {
 			$this->results['fieldstosearchall']['ef.firstname'] = 'Firstname';
@@ -1716,5 +1849,293 @@ class ActionsSellyoursaas
 			$res = 1;
 		}
 		return $res;
+	}
+
+	/**
+	 * Overloading the addMcpApiBridgeEnrichments function : expose the packages API methods as AI assistant tools
+	 *
+	 * @param   array           $parameters     Hook metadatas (context, etc...)
+	 * @param   Object          $object         The MCP API bridge
+	 * @param   string          $action         Current action
+	 * @param   HookManager     $hookmanager    Hook manager propagated to allow calling another hook
+	 * @return  int 		      			  	=0
+	 */
+	public function addMcpApiBridgeEnrichments($parameters, &$object, &$action, $hookmanager)
+	{
+		global $langs;
+
+		$langs->load("sellyoursaas@sellyoursaas");	// For the confirmation messages of write tools
+
+		// Business fields of the package can be written by the AI assistant. Technical fields and fields
+		// containing code executed on servers (shell, sql, cron, config files, vhost) are excluded.
+		dol_include_once('/sellyoursaas/class/packages.class.php');
+		$tmppackage = new Packages($this->db);
+		$protectedfields = array('cliafter', 'cliafterpaid', 'sqlpasswordreset', 'sqlafterundeployoption', 'cliafterdeployoption', 'sqlafter', 'crontoadd', 'conffile1', 'allowoverride', 'otherinformations_formula', 'sqltoupdateeinvoiceconst', 'sqlafterpaid', 'version_formula');
+		$writableparams = array();
+		foreach ($tmppackage->fields as $fieldname => $fielddef) {
+			if (in_array($fieldname, array('rowid', 'entity', 'date_creation', 'tms', 'fk_user_creat', 'fk_user_modif', 'import_key')) || in_array($fieldname, $protectedfields)) {
+				continue;
+			}
+			$fielddesc = $langs->transnoentitiesnoconv($fielddef['label']);
+			if (!empty($fielddef['help'])) {
+				$fielddesc .= '. '.dol_string_nohtmltag(str_replace('<br>', "\n", $langs->transnoentitiesnoconv($fielddef['help'])));
+			}
+			if (!empty($fielddef['arrayofkeyval'])) {
+				$fielddesc .= ' (values: '.implode(', ', array_map(function ($k, $v) {
+					return $k.'='.$v;
+				}, array_keys($fielddef['arrayofkeyval']), $fielddef['arrayofkeyval'])).')';
+			}
+			$writableparams[$fieldname] = $fielddesc;
+		}
+
+		$this->results['sellyoursaas'] = array(
+			'sellyoursaas' => array(
+				'label' => 'SellYourSaas packages (definition of the applications deployed for SaaS instances)',
+				'methods' => array(
+					'index' => array(
+						'suffix' => 'packages_list',
+						'default_properties' => 'id,ref,label,restrict_domains,status',
+						'description' => "List the SellYourSaas packages. Filter with sqlfilters on t.ref, t.label or t.status (1=Active, 0=Disabled).",
+						'params' => array(
+							'sqlfilters' => "Universal filter, e.g. (t.ref:like:'Dolibarr%') or (t.status:=:1)"
+						)
+					),
+					'get' => array(
+						'suffix' => 'packages_get',
+						'description' => "Get one SellYourSaas package by its rowid (id) or by its exact ref (ref).",
+						'get_by' => array('ref' => 'getByRef'),
+						'params' => array(
+							'id' => "Rowid of the package (use 0 when identifying by ref).",
+							'ref' => "Exact ref of the package, alternative to id."
+						)
+					),
+					'post' => array(
+						'suffix' => 'packages_create',
+						'description' => "Create a new SellYourSaas package. Returns the rowid of the new package. The user confirms before anything is written.",
+						'write' => array(
+							'preview' => 'SellYourSaasAIPreviewCreatePackage',
+							'required' => array('ref'),
+							'args' => array('ref', 'label'),
+							'defaults' => array('status' => 0),	// Field status is mandatory for the API
+							'right' => array('sellyoursaas', 'write')
+						),
+						'params' => $writableparams
+					),
+					'put' => array(
+						'suffix' => 'packages_update',
+						'description' => "Update an existing SellYourSaas package. Give 'id' (rowid of the package, use packages_get with ref to find it) and ONLY the fields to change. The user confirms before anything is written.",
+						'write' => array(
+							'preview' => 'SellYourSaasAIPreviewUpdatePackage',
+							'required' => array('id'),
+							'args' => array('id'),
+							'right' => array('sellyoursaas', 'write')
+						),
+						'params' => array_merge(array('id' => "Rowid of the package to update."), $writableparams)
+					)
+				)
+			),
+			'sellyoursaas_whitelists' => array(
+				'endpoint' => 'sellyoursaas',
+				'label' => 'SellYourSaas whitelists (IPs and emails allowed to register an instance or to send emails)',
+				'methods' => $this->getMcpListMethods(
+					'whitelist',
+					'Whitelist',
+					"type: 'ip' for the whitelist of IPs (bypass the IP checks when registering an instance or sending emails), 'email' for the whitelist of emails (allowed to register an instance or to be used as sender of emails).",
+					array('ip', 'email'),
+					array(
+						'content' => "The IP (type ip) or email (type email). Wild char * is allowed, for example: 1.2.3.*",
+						'comment' => "Comment",
+						'status' => "Status (values: 0=Disabled, 1=Enabled). Default is 1."
+					)
+				)
+			),
+			'sellyoursaas_blacklists' => array(
+				'endpoint' => 'sellyoursaas',
+				'label' => 'SellYourSaas blacklists (forbidden IPs, email contents, email senders, email recipients and dirs on disk)',
+				'methods' => $this->getMcpListMethods(
+					'blacklist',
+					'Blacklist',
+					"type: 'ip' for IPs not allowed to register an instance or to send emails, 'content' for forbidden contents of emails sent by instances, 'from' for emails not allowed to register an instance or to be used as sender of emails, 'to' for emails not allowed as recipient of emails, 'dir' for dirs or files not allowed on the disk of instances.",
+					array('ip', 'content', 'from', 'to', 'dir'),
+					array(
+						'content' => "The IP (type ip), the forbidden string (type content), the email (type from or to) or the path of the dir or file (type dir).",
+						'comment' => "Comment (only for type ip)",
+						'date_use' => "Date of last use (only for type ip)",
+						'noblacklistif' => "Condition to not blacklist the dir (only for type dir)",
+						'status' => "Status (values: 0=Disabled, 1=Enabled). Default is 1."
+					)
+				)
+			)
+		);
+
+		return 0;
+	}
+
+	/**
+	 * Return the AI tool methods (list, get, create, update, delete) of the API for a whitelist or a blacklist
+	 *
+	 * @param	string					$name			Name of the list in the API methods ('whitelist' or 'blacklist')
+	 * @param	string					$keysuffix		Suffix of the language keys of the confirmation messages
+	 * @param	string					$typedesc		Description of the parameter type
+	 * @param	string[]				$types			Allowed values of type
+	 * @param	array<string,string>	$fieldparams	Writable field => description
+	 * @return	array<string,array<string,mixed>>		Methods
+	 */
+	private function getMcpListMethods($name, $keysuffix, $typedesc, $types, $fieldparams)
+	{
+		$ucname = dol_ucfirst($name);
+		$typeparam = array('type' => $typedesc);
+		$typeparamread = array('type' => $typedesc.' {@choice '.implode(',', $types).'}');	// Lifted into an enum for the read tools
+
+		return array(
+			'list'.$ucname => array(
+				'suffix' => 'list',
+				'default_properties' => 'id,content,status',
+				'description' => "List the entries of a SellYourSaas ".$name.". ".$typedesc." Filter with sqlfilters on t.content or t.status (1=Enabled, 0=Disabled).",
+				'params' => array_merge($typeparamread, array(
+					'sqlfilters' => "Universal filter, e.g. (t.content:like:'%example.com%') or (t.status:=:1)"
+				))
+			),
+			'get'.$ucname => array(
+				'suffix' => 'get',
+				'description' => "Get one entry of a SellYourSaas ".$name." by its rowid (id).",
+				'params' => array_merge($typeparamread, array('id' => "Rowid of the entry."))
+			),
+			'post'.$ucname => array(
+				'suffix' => 'create',
+				'description' => "Add an entry into a SellYourSaas ".$name.". ".$typedesc." Returns the rowid of the new entry. The user confirms before anything is written.",
+				'write' => array(
+					'preview' => 'SellYourSaasAIPreviewCreate'.$keysuffix,
+					'required' => array('type', 'content'),
+					'args' => array('content', 'type'),
+					'right' => array('sellyoursaas', 'write')
+				),
+				'params' => array_merge($typeparam, $fieldparams)
+			),
+			'put'.$ucname => array(
+				'suffix' => 'update',
+				'description' => "Update an entry of a SellYourSaas ".$name.". Give 'type', 'id' (rowid of the entry, use the list tool to find it) and ONLY the fields to change. The user confirms before anything is written.",
+				'write' => array(
+					'preview' => 'SellYourSaasAIPreviewUpdate'.$keysuffix,
+					'required' => array('type', 'id'),
+					'args' => array('id', 'type'),
+					'right' => array('sellyoursaas', 'write')
+				),
+				'params' => array_merge($typeparam, array('id' => "Rowid of the entry to update."), $fieldparams)
+			),
+			'delete'.$ucname => array(
+				'suffix' => 'delete',
+				'description' => "Delete an entry of a SellYourSaas ".$name.". Give 'type' and 'id' (rowid of the entry, use the list tool to find it). The user confirms before anything is written.",
+				'write' => array(
+					'preview' => 'SellYourSaasAIPreviewDelete'.$keysuffix,
+					'required' => array('type', 'id'),
+					'args' => array('id', 'type'),
+					'right' => array('sellyoursaas', 'delete')
+				),
+				'params' => array_merge($typeparam, array('id' => "Rowid of the entry to delete."))
+			)
+		);
+	}
+
+	/**
+	 * Overloading the checkMcpApiBridgeWrite function : refuse a write of an AI tool on packages before its confirmation
+	 *
+	 * @param   array           $parameters     Hook metadatas (context, etc...)
+	 * @param   Object|null     $object         Object the write is about, if known by the bridge
+	 * @param   string          $action         Operation ('create', 'update', ...)
+	 * @param   HookManager     $hookmanager    Hook manager propagated to allow calling another hook
+	 * @return  int 		      			  	=0 if OK, <0 to refuse the write
+	 */
+	public function checkMcpApiBridgeWrite($parameters, &$object, &$action, $hookmanager)
+	{
+		global $langs;
+
+		$tool = (string) $parameters['tool'];
+		$reg = array();
+		if (preg_match('/^api_sellyoursaas_(whitelist|blacklist)s_(create|update|delete)$/', $tool, $reg)) {
+			return $this->checkMcpListWrite($reg[1], $reg[2], (array) $parameters['args']);
+		}
+		if (!in_array($tool, array('api_sellyoursaas_packages_create', 'api_sellyoursaas_packages_update'))) {
+			return 0;
+		}
+
+		$langs->load("sellyoursaas@sellyoursaas");
+		$this->errors = array();
+
+		dol_include_once('/sellyoursaas/class/packages.class.php');
+		$args = (array) $parameters['args'];
+
+		if ($tool == 'api_sellyoursaas_packages_update') {
+			$package = new Packages($this->db);
+			if (empty($args['id']) || $package->fetch((int) $args['id']) <= 0) {
+				$this->errors[] = $langs->transnoentitiesnoconv("SellYourSaasAIPackageNotFound", (string) ($args['id'] ?? ''));
+				return -1;
+			}
+			// A ref changed to the one of another package is refused
+			if (isset($args['ref']) && (string) $args['ref'] !== '' && $args['ref'] != $package->ref) {
+				$otherpackage = new Packages($this->db);
+				if ($otherpackage->fetch(0, (string) $args['ref']) > 0) {
+					$this->errors[] = $langs->transnoentitiesnoconv("SellYourSaasAIPackageRefAlreadyExists", (string) $args['ref']);
+					return -1;
+				}
+			}
+		} else {
+			$package = new Packages($this->db);
+			if (!empty($args['ref']) && $package->fetch(0, (string) $args['ref']) > 0) {
+				$this->errors[] = $langs->transnoentitiesnoconv("SellYourSaasAIPackageRefAlreadyExists", (string) $args['ref']);
+				return -1;
+			}
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Check a write of an AI tool on a whitelist or a blacklist before its confirmation
+	 *
+	 * @param	string					$name		'whitelist' or 'blacklist'
+	 * @param	string					$operation	'create', 'update' or 'delete'
+	 * @param	array<string,mixed>		$args		Arguments of the write
+	 * @return	int									0 if OK, <0 to refuse the write
+	 */
+	private function checkMcpListWrite($name, $operation, $args)
+	{
+		global $langs;
+
+		$langs->load("sellyoursaas@sellyoursaas");
+		$this->errors = array();
+
+		$classes = array(
+			'whitelist' => array('ip' => 'Whitelistip', 'email' => 'Whitelistemail'),
+			'blacklist' => array('ip' => 'Blacklistip', 'content' => 'Blacklistcontent', 'from' => 'Blacklistfrom', 'to' => 'Blacklistto', 'dir' => 'Blacklistdir')
+		);
+		$type = (string) ($args['type'] ?? '');
+		if (!isset($classes[$name][$type])) {
+			$this->errors[] = $langs->transnoentitiesnoconv("SellYourSaasAIBadListType", $type, implode(', ', array_keys($classes[$name])));
+			return -1;
+		}
+		$classname = $classes[$name][$type];
+		dol_include_once('/sellyoursaas/class/'.dol_strtolower($classname).'.class.php');
+
+		$entry = new $classname($this->db);
+		if ($operation != 'create' && (empty($args['id']) || $entry->fetch((int) $args['id']) <= 0)) {
+			$this->errors[] = $langs->transnoentitiesnoconv("SellYourSaasAIEntryNotFound", (string) ($args['id'] ?? ''), $name.' '.$type);
+			return -1;
+		}
+
+		// A content already in the list (in another entry) is refused
+		$content = (string) ($args['content'] ?? '');
+		if ($operation != 'delete' && $content !== '' && ($operation == 'create' || $content != $entry->content)) {
+			$sql = "SELECT rowid FROM ".$this->db->prefix().$entry->table_element;
+			$sql .= " WHERE content = '".$this->db->escape($content)."'";
+			$sql .= $this->db->plimit(1);
+			$resql = $this->db->query($sql);
+			if ($resql && ($obj = $this->db->fetch_object($resql))) {
+				$this->errors[] = $langs->transnoentitiesnoconv("SellYourSaasAIEntryAlreadyExists", $content, $name.' '.$type, (string) $obj->rowid);
+				return -1;
+			}
+		}
+
+		return 0;
 	}
 }

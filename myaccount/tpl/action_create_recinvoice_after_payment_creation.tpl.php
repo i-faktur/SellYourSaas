@@ -15,18 +15,30 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ * @var User $user
+ *
+ * @var ?SellYourSaasUtils $sellyoursaasutils
+ * @var string $action
+ * @var string $backurl
+ * @var string $paymentmode		'card' or 'ban'
+ * @var int $thirdpartyhadalreadyapaymentmode
+ * @var int $error
+ * @var array $listofcontractid
+ * @var Societe $mythirdpartyaccount
+ * @var int $now
+ * @var Translate $langscompany
+ */
+
 // Protection to avoid direct call of template
 if (empty($conf) || ! is_object($conf)) {
 	print "Error, template page can't be called as URL";
 	exit(1);
 }
-
-// $listofcontractid must be defined
-// $error must be defined
-// $paymentmode must be defined to 'card' or 'ban'
-// $backurl
-// $thirdpartyhadalreadyapaymentmode
-// $langscompany
 
 dol_include_once('/sellyoursaas/class/sellyoursaasutils.class.php');
 if (!is_object($sellyoursaasutils)) {
@@ -110,10 +122,11 @@ if (! $error) {
 			$originid = $contract->id;
 
 			$invoice_draft->origin = $origin;
+			$invoice_draft->origin_type = $origin;
 			$invoice_draft->origin_id = $originid;
 
 			// Possibility to add external linked objects with hooks
-			$invoice_draft->linked_objects[$invoice_draft->origin] = $invoice_draft->origin_id;
+			$invoice_draft->linked_objects[$invoice_draft->origin_type] = $invoice_draft->origin_id;
 
 			$idinvoice = $invoice_draft->create($user);      // This include class to add_object_linked() and add add_contact()
 			if (! ($idinvoice > 0)) {
@@ -124,7 +137,7 @@ if (! $error) {
 
 		$frequency=1;
 		$frequency_unit='m';
-		$discountcode = strtoupper(trim(GETPOST('discountcode', 'aZ09')));	// If a discount code was prodived on page
+		$discountcode = strtoupper(trim(GETPOST('discountcode', 'aZ09')));	// If a discount code was provided on page
 		$discountcode = preg_replace('/\-\d+$/', '', $discountcode);		// Remove the part "-123" into "MYCODE-123"
 		/* If a discount code exists on contract level, it was used to prefill the payment page, so it is received into the GETPOST('discountcode', 'aZ09').
 		if (empty($discountcode) && ! empty($contract->array_options['options_discountcode'])) {    // If no discount code provided, but we find one on contract, we use this one
@@ -133,6 +146,7 @@ if (! $error) {
 
 		$discounttype = '';
 		$discountval = 0;
+		$discountcodefound = 0;
 		$validdiscountcodearray = array();
 		$nbofproductapp = 0;
 
@@ -241,42 +255,69 @@ if (! $error) {
 					}
 					$frequency = $tmpproduct->duration_value;
 					$frequency_unit = $tmpproduct->duration_unit;
+				}
 
-					// Process the discount code
-					if ($tmpproduct->array_options['options_register_discountcode']) {
-						$tmpvaliddiscountcodearray = explode(',', $tmpproduct->array_options['options_register_discountcode']);
-						foreach ($tmpvaliddiscountcodearray as $valdiscount) {
-							$valdiscountarray = explode(':', $valdiscount);
-							$tmpcode = strtoupper(trim($valdiscountarray[0]));
-							if (preg_match('/%/', trim($valdiscountarray[1]))) {	// This is a percent discount
-								$tmpval = (int) str_replace('%', '', trim($valdiscountarray[1]));
-								if ($tmpval > 0 && $tmpval < 100) {
-									$validdiscountcodearray[$tmpcode] = array('code'=>$tmpcode, 'type'=>'percent', 'value'=>$tmpval);
-								} else {
-									dol_syslog("Error: Bad definition of discount for product id = ".$tmpproduct->id." with value ".$tmpproduct->array_options['options_register_discountcode'], LOG_ERR);
-								}
+				// Process the discount code (each product of a line, app or option, can have its own list of discount codes)
+				if ($discountcode && $tmpproduct->array_options['options_register_discountcode']) {
+					$validdiscountcodearray = array();		// Reset the list of codes so the line is checked with the codes of its own product
+					$tmpvaliddiscountcodearray = explode(',', $tmpproduct->array_options['options_register_discountcode']);
+					foreach ($tmpvaliddiscountcodearray as $valdiscount) {
+						$valdiscountarray = explode(':', $valdiscount);
+						$tmpcode = strtoupper(trim($valdiscountarray[0]));
+						if (preg_match('/%/', trim($valdiscountarray[1]))) {	// This is a percent discount
+							$tmpval = (int) str_replace('%', '', trim($valdiscountarray[1]));
+							if ($tmpval > 0 && $tmpval < 100) {
+								$validdiscountcodearray[$tmpcode] = array('code'=>$tmpcode, 'type'=>'percent', 'value'=>$tmpval);
 							} else {
-								dol_syslog("Error: Type of discount not yet supported for product id = ".$tmpproduct->id." with value ".$tmpproduct->array_options['options_register_discountcode'], LOG_ERR);
+								dol_syslog("Error: Bad definition of discount for product id = ".$tmpproduct->id." with value ".$tmpproduct->array_options['options_register_discountcode'], LOG_ERR);
 							}
-						}
-						// If we entered a discountcode or get it from contract
-						if (! empty($validdiscountcodearray[$discountcode])) {
-							$discounttype = $validdiscountcodearray[$discountcode]['type'];
-							$discountval = $validdiscountcodearray[$discountcode]['value'];
 						} else {
-							$discountcode = '';
+							dol_syslog("Error: Type of discount not yet supported for product id = ".$tmpproduct->id." with value ".$tmpproduct->array_options['options_register_discountcode'], LOG_ERR);
 						}
-						//var_dump($validdiscountcodearray); var_dump($discountcode); var_dump($discounttype); var_dump($discountval); exit;
+					}
+					// If we entered a discountcode or get it from contract
+					if (! empty($validdiscountcodearray[$discountcode])) {
+						$discounttype = $validdiscountcodearray[$discountcode]['type'];
+						$discountval = $validdiscountcodearray[$discountcode]['value'];
+						$discountcodefound++;
 						if ($discounttype == 'percent') {
 							if ($discountval > $discount) {
 								$discount = $discountval;		// If discount with coupon code is higher than the one defined into contract, we use it.
 							}
 						}
 					}
+					//var_dump($validdiscountcodearray); var_dump($discountcode); var_dump($discounttype); var_dump($discountval); exit;
 				}
 
 				// Insert the line
-				$result = $invoice_draft->addline($desc, $price_invoice_template_line, $lines[$i]->qty, $tva_tx, $localtax1_tx, $localtax2_tx, $lines[$i]->fk_product, $discount, $date_start, $date_end, 0, $lines[$i]->info_bits, $lines[$i]->fk_remise_except, 'HT', 0, $product_type, $lines[$i]->rang, $lines[$i]->special_code, $invoice_draft->origin, $lines[$i]->rowid, $fk_parent_line, $lines[$i]->fk_fournprice, $lines[$i]->pa_ht, $label, $array_options, $lines[$i]->situation_percent, $lines[$i]->fk_prev_id, $lines[$i]->fk_unit);
+				$result = $invoice_draft->addline(
+					$desc,
+					$price_invoice_template_line,
+					$lines[$i]->qty,
+					$tva_tx,
+					$localtax1_tx,
+					$localtax2_tx,
+					$lines[$i]->fk_product,
+					$discount,
+					$date_start,
+					$date_end,
+					0,
+					$lines[$i]->info_bits,
+					$lines[$i]->fk_remise_except,
+					'HT',
+					0,
+					$product_type,
+					$lines[$i]->rang,
+					$lines[$i]->special_code,
+					$invoice_draft->origin_type,
+					$lines[$i]->rowid,
+					$fk_parent_line,
+					$lines[$i]->fk_fournprice,
+					$lines[$i]->pa_ht,
+					$label,
+					$array_options, $lines[$i]->situation_percent,
+					$lines[$i]->fk_prev_id, $lines[$i]->fk_unit
+				);
 
 				if ($result > 0) {
 					$lineid = $result;
@@ -291,11 +332,16 @@ if (! $error) {
 					$fk_parent_line = $result;
 				}
 			}
+
+			// If the discount code was not found into the codes of any product of the contract, we discard it
+			if ($discountcode && ! $discountcodefound) {
+				$discountcode = '';
+			}
 		}
 
 		// Now we convert invoice into a template
 		if (! $error) {
-			dol_syslog("--- Now we convert invoice into recuring invoice");
+			dol_syslog("--- Now we convert invoice into recurring invoice");
 
 			//var_dump($invoice_draft->lines);
 			//var_dump(dol_print_date($date_start,'dayhour'));
@@ -335,6 +381,8 @@ if (! $error) {
 			$invoice_rec->unit_frequency = $frequency_unit;
 			$invoice_rec->nb_gen_max = $nb_gen_max;
 			$invoice_rec->auto_validate = 0;
+			//$invoice_rec->generate_pdf = ($isfreemodeenabled ? 0 : 1);
+			$invoice_rec->generate_pdf = 0;		// By default we do not generate the PDF, we will do it when calling createRecurringInvoices().
 
 			$invoice_rec->fk_project = 0;
 
@@ -356,8 +404,9 @@ if (! $error) {
 					$contractidid = reset($srcObject->linkedObjectsIds['contrat']);
 
 					$invoice_rec->origin = 'contrat';
+					$invoice_rec->origin_type = 'contrat';
 					$invoice_rec->origin_id = $contractidid;
-					$invoice_rec->linked_objects[$invoice_draft->origin] = $invoice_draft->origin_id;
+					$invoice_rec->linked_objects[$invoice_draft->origin_type] = $invoice_draft->origin_id;
 				}
 			}
 
@@ -373,10 +422,21 @@ if (! $error) {
 					setEventMessages($db->lasterror(), null, 'errors');
 				}
 
-				$result=$oldinvoice->delete($user, 1);
+				$result = $oldinvoice->delete($user, 1);
 				if (! $error && $result < 0) {
 					$error++;
 					setEventMessages($oldinvoice->error, $oldinvoice->errors, 'errors');
+				}
+
+				// If the thirdparty contains the reserved keyword for sandbox, we suspend the template invoice
+				// so no real invoice will be generated later by the recurring invoice batch
+				if (! $error && ! $isfreemodeenabled && sellyoursaasIsSandboxThirdparty($mythirdpartyaccount)) {
+					dol_syslog("--- The thirdparty has the reserved keyword for sandbox into its name, so we suspend the template invoice with id ".$invoice_rec->id, LOG_DEBUG, 0);
+					$result = $invoice_rec->setStatut(FactureRec::STATUS_SUSPENDED);
+					if ($result <= 0) {
+						$error++;
+						setEventMessages($invoice_rec->error, $invoice_rec->errors, 'errors');
+					}
 				}
 			} else {
 				$error++;
@@ -384,7 +444,9 @@ if (! $error) {
 			}
 
 			// A template invoice was just created, we run generation of invoice if template invoice date is already in past
-			if (! $error && !$isfreemodeenabled) {
+			// Note: If the name of the thirdparty contains the reserved keyword for sandbox, we do not generate the
+			// real invoice, so no invoice is validated and no payment is recorded, we continue like if payment was done.
+			if (! $error && !$isfreemodeenabled && ! sellyoursaasIsSandboxThirdparty($mythirdpartyaccount)) {
 				dol_syslog("--- A template invoice was generated with id ".$invoicerecid.", now we run createRecurringInvoices to build real invoice", LOG_DEBUG, 0);
 				$facturerec = new FactureRec($db);
 
@@ -400,7 +462,10 @@ if (! $error) {
 				}
 				$user->rights->facture->invoice_advance->validate = 1;
 
-				$result = $facturerec->createRecurringInvoices($invoicerecid, 1);		// Generate real invoice from pending recurring invoices
+				// Generate real invoice from the newly created pending recurring invoices
+				// This also validate it and this can generate the PDF if ->generate_pdf of the invoice with id $invoicerecid was set to 1 previously.
+				// It does not send email because ->auto_validate of the invoice with id $invoicerecid was not set to 2 previously.
+				$result = $facturerec->createRecurringInvoices($invoicerecid, 1, 0, 1);
 				if ($result != 0) {
 					$error++;
 					setEventMessages($facturerec->error, $facturerec->errors, 'errors');
@@ -408,10 +473,14 @@ if (! $error) {
 
 				$user->rights->facture->creer = $savperm1;
 				$user->rights->facture->invoice_advance->validate = $savperm2;
+			} elseif (! $error && !$isfreemodeenabled) {
+				dol_syslog("--- The thirdparty has the reserved keyword for sandbox into its name, so we do not generate the real invoice from the template invoice, so no invoice is validated and no payment is recorded", LOG_DEBUG, 0);
 			}
 
 			// Now try to take the payment if payment is OK and payment mode is not a differed payment mode
-			if (! $error && $paymentmode != 'ban' && !$isfreemodeenabled) {
+			// Note: If the name of the thirdparty contains the reserved keyword for sandbox, no payment is taken
+			// and no payment is recorded, we continue like if payment was done.
+			if (! $error && $paymentmode != 'ban' && !$isfreemodeenabled && ! sellyoursaasIsSandboxThirdparty($mythirdpartyaccount)) {
 				if (empty($paymentmode)) {
 					$paymentmode = 'card';
 				}
@@ -427,7 +496,7 @@ if (! $error) {
 					setEventMessages($sellyoursaasutils->error, $sellyoursaasutils->errors, 'errors');
 					dol_syslog("--- Error when taking payment (paymentmode=".$paymentmode.", STRIPE_USE_INTENT_WITH_AUTOMATIC_CONFIRMATION on) ".$sellyoursaasutils->error, LOG_DEBUG, 0);
 				} else {
-					dol_syslog("--- Success to take payment (paymenmode=".$paymentmonde.", STRIPE_USE_INTENT_WITH_AUTOMATIC_CONFIRMATION on)", LOG_DEBUG, 0);
+					dol_syslog("--- Success to take payment (paymenmode=".$paymentmode.", STRIPE_USE_INTENT_WITH_AUTOMATIC_CONFIRMATION on)", LOG_DEBUG, 0);
 				}
 
 				// If some payment was really done, we force commit to be sure to validate invoices payment done by stripe, whatever is global result of doTakePaymentStripeForThirdparty
@@ -454,6 +523,17 @@ if (! $error) {
 					setEventMessages($sellyoursaasutils->error, $sellyoursaasutils->errors, 'errors');
 				}
 			}
+
+			// Activate all lines of a contract if freemode is enabled
+			if (!$error && $isfreemodeenabled) {
+				dol_syslog("--- Now we activate contact lines of contract".$contract->id." for freemode instance", LOG_DEBUG, 0);
+
+				$result = $contract->activateAll($user);
+				if ($result <= 0) {
+					$error++;
+					setEventMessages($sellyoursaasutils->error, $sellyoursaasutils->errors, 'errors');
+				}
+			}
 		}
 		if (! $error && !$thirdpartyhadalreadyapaymentmode) {
 			$comment = 'Execute remote script on '.$contract->ref.' after the creation of a first payment method';
@@ -472,7 +552,10 @@ if (! $error) {
 
 if (! $error) {
 	// Payment mode successfully recorded
-	if (!$isfreemodeenabled) {
+	if (sellyoursaasIsSandboxThirdparty($mythirdpartyaccount)) {
+		// The name of the thirdparty contains the reserved keyword for sandbox, so no invoice was validated and no payment was recorded
+		setEventMessages($langs->trans("PaymentModeRecordedInSandboxMode"), null, 'mesgs');
+	} elseif (!$isfreemodeenabled) {
 		setEventMessages($langs->trans("PaymentModeRecorded"), null, 'mesgs');
 	} else {
 		setEventMessages($langs->trans("InstanceValidated"), null, 'mesgs');
@@ -480,9 +563,9 @@ if (! $error) {
 
 	$db->commit();
 
-	$url=$_SERVER["PHP_SELF"];
+	$url = $_SERVER["PHP_SELF"];
 	if ($backurl) {
-		$url=$backurl;
+		$url = $backurl;
 	}
 
 	if ($thirdpartyhadalreadyapaymentmode > 0) {
@@ -491,7 +574,7 @@ if (! $error) {
 		// Set flag 'showconversiontracker' in session to output the js tracker by llxFooter function of customer dashboard.
 		$_SESSION['showconversiontracker']='paymentmodified';
 
-		$url.=(preg_match('/\?/', $url) ? '&' : '?').'paymentmodified=1';
+		$url .= (preg_match('/\?/', $url) ? '&' : '?').'paymentmodified=1';
 
 		// Send to DataDog (metric + event)
 		if (getDolGlobalString('SELLYOURSAAS_DATADOG_ENABLED')) {
@@ -516,7 +599,7 @@ if (! $error) {
 		// Set flag 'showconversiontracker' in session to output the js tracker by llxFooter function of customer dashboard.
 		$_SESSION['showconversiontracker']='paymentrecorded';
 
-		$url.=(preg_match('/\?/', $url) ? '&' : '?').'paymentrecorded=1';
+		$url .= (preg_match('/\?/', $url) ? '&' : '?').'paymentrecorded=1';
 
 		// Send to DataDog (metric + event)
 		if (getDolGlobalString('SELLYOURSAAS_DATADOG_ENABLED')) {

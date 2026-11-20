@@ -145,6 +145,28 @@ function sellyoursaasThirdpartyHasPaymentMode($thirdpartyidtotest)
 	return $atleastonepaymentmode;
 }
 
+
+/**
+ * Check if a thirdparty has the reserved keyword for Stripe sandbox into its name.
+ * If yes, the payment page (credit card or SEPA mandate) and the payment return circuit of
+ * this thirdparty must use the Stripe sandbox (test) account, must not validate invoices
+ * and must not record payments (the circuit continues like if the payment was done).
+ * The keyword is defined with the constant SELYOURSAAS_STRIPE_SANDBOX_KEYWORD.
+ *
+ * @param 	Societe	$thirdparty		Object thirdparty (the customer account)
+ * @return 	int						1 if the name of the thirdparty contains the reserved keyword, 0 otherwise
+ */
+function sellyoursaasIsSandboxThirdparty($thirdparty)
+{
+	$stripeSandboxKeyword = trim(getDolGlobalString('SELLYOURSAAS_STRIPE_SANDBOX_KEYWORD'));
+
+	if (empty($stripeSandboxKeyword) || !is_object($thirdparty) || empty($thirdparty->name)) {
+		return 0;
+	}
+
+	return (stripos($thirdparty->name, $stripeSandboxKeyword) !== false) ? 1 : 0;
+}
+
 /**
  * Return if instance is a paid instance or not
  * Check if there is an invoice or template invoice (it was a paying customer) or just a template invoice (it is a current paying customer)
@@ -163,7 +185,7 @@ function sellyoursaasIsPaidInstance($contract, $mode = 0, $loadalsoobjects = 0)
 
 	$foundtemplate=0;
 	if (!empty($contract->linkedObjectsIds['facturerec']) && is_array($contract->linkedObjectsIds['facturerec'])) {
-		foreach ($contract->linkedObjectsIds['facturerec'] as $idelementelement => $templateinvoiceid) {
+		foreach ($contract->linkedObjectsIds['facturerec'] as $templateidelementelement => $templateinvoiceid) {
 			$foundtemplate++;
 			break;
 		}
@@ -263,7 +285,7 @@ function sellyoursaasHasOpenInvoices($contract)
 
 /**
  * Return date of expiration. Can also return other information on instance (status, nb of users, id of product of application, ...)
- * For expiration date, it takes the lowest planed end date for services (whatever is service status)
+ * For expiration date, it takes the lowest planned end date for services (whatever is service status)
  *
  * @param 	Contrat $contract				Object contract
  * @param	int		$onlyexpirationdate		1=Return only property 'expiration_date' (no need to load each product line properties to also set the 'nbusers', 'nbofgbs', 'status', 'duration_value', ...)
@@ -325,7 +347,7 @@ function sellyoursaasGetExpirationDate($contract, $onlyexpirationdate = 0)
 				$statusofappline = $line->statut;
 
 				if (empty($duration_value) || empty($duration_unit)) {
-					dol_syslog("Error, the definition of duration for product ID ".$prodforline->id." is uncomplete.", LOG_ERR);
+					dol_syslog("Error, the definition of duration for product ID ".$prodforline->id." is incomplete.", LOG_ERR);
 				}
 			}
 			if ($prodforline->array_options['options_app_or_option'] == 'system') {
@@ -344,11 +366,52 @@ function sellyoursaasGetExpirationDate($contract, $onlyexpirationdate = 0)
 	return array('expirationdate'=>$expirationdate, 'status'=>$statusofappline, 'duration_value'=>$duration_value, 'duration_unit'=>$duration_unit, 'nbusers'=>$nbofusers, 'nbofgbs'=>$nbofgbs, 'appproductid'=>$appproductid);
 }
 
+/**
+ * Return an array of all the suspended contracts for thirdparty
+ *
+ * @param	int	$thirdpatyid	 If of thirdparty
+ * @return  array				 The array with all supended contracts
+ */
+function sellyoursaasGetSuspendedContracts($thirdpatyid)
+{
+	global $conf, $db;
 
+	require_once DOL_DOCUMENT_ROOT."/contrat/class/contrat.class.php";
+	$contractarray = array();
+
+	$sql = "SELECT c.rowid as id";
+	$sql .= " FROM ".MAIN_DB_PREFIX."contrat as c";
+	$sql .= " WHERE c.fk_soc = ".((int) $thirdpatyid);
+	$sql .= " AND c.entity = ".((int) $conf->entity);
+	$sql .= " AND c.statut = 1";
+	$resql=$db->query($sql);
+	if ($resql) {
+		$num = $db->num_rows($resql);
+		if ($num) {
+			$i=0;
+			while ($i < $num) {
+				$objtmp = $db->fetch_object($resql);
+				if (!empty($objtmp->id)) {
+					$contract = new Contrat($db);
+					$res = $contract->fetch($objtmp->id);
+					if ($res > 0) {
+						if (sellyoursaasIsSuspended($contract)) {//DEBUG
+							$contractarray[] = $contract;
+						}
+					}
+				}
+				$i++;
+			}
+		}
+	} else {
+		dol_print_error($db);
+	}
+	return $contractarray;
+}
 
 /**
  * Return if contract is suspenced/close
- * Take lowest planed end date for services (whatever is service status)
+ * Take lowest planned end date for services (whatever is service status)
  *
  * @param 	Contrat $contract		Object contract
  * @return	boolean					Return if a contract is suspended or not
@@ -363,6 +426,85 @@ function sellyoursaasIsSuspended($contract)
 	}
 
 	return false;
+}
+
+/**
+ * Check that a custom domain name currently resolves (public DNS) to the same IP address(es)
+ * as the instance's own default domain name, so we know a Let's Encrypt HTTP-01 challenge
+ * against it has a chance to succeed.
+ *
+ * @param	string	$customurl	Custom domain name to check (without protocol)
+ * @param	string	$reffqdn	Instance's own default domain name (Contrat->ref_customer)
+ * @return	int					1 if customurl resolves to the same IP(s) than reffqdn, 0 if not, -1 if we failed to resolve reffqdn itself
+ */
+function sellyoursaasCheckCustomUrlDns($customurl, $reffqdn)
+{
+	$ipref = @gethostbynamel($reffqdn);
+	if (empty($ipref)) {
+		// Should not happen: reffqdn is the instance's own working domain name.
+		return -1;
+	}
+
+	$ipcustom = @gethostbynamel($customurl);
+	if (empty($ipcustom)) {
+		return 0;
+	}
+
+	if (count(array_intersect($ipref, $ipcustom)) > 0) {
+		return 1;
+	}
+
+	return 0;
+}
+
+/**
+ * Check if a hostname is already used by another contract, whatever its deployment server.
+ * The hostname (with and without www.) is compared, case insensitively, to the default instance hostname
+ * (ref_customer), the custom url and the website domain names of all other contracts,
+ * and to the ref (hostname) of all deployment servers.
+ *
+ * @param	DoliDB	$db					Database handler
+ * @param	string	$customurl			Custom domain name to check
+ * @param	int		$excludecontractid	Contract id to exclude from the search (the one being edited)
+ * @return	int							Id of the other contract or deployment server already using this hostname, 0 if not used, -1 if error
+ */
+function sellyoursaasCheckCustomUrlAlreadyUsed($db, $customurl, $excludecontractid = 0)
+{
+	$basename = preg_replace('/^www\./', '', dol_strtolower(trim($customurl)));
+	if ($basename === '') {
+		return 0;
+	}
+	$listofnames = array($basename, 'www.'.$basename);
+	$sqlinnames = "'".$db->escape($listofnames[0])."', '".$db->escape($listofnames[1])."'";
+
+	$listofsql = array();
+	// Default hostname of instances
+	$listofsql[] = "SELECT c.rowid as fk_object FROM ".MAIN_DB_PREFIX."contrat as c WHERE LOWER(c.ref_customer) IN (".$sqlinnames.")".($excludecontractid > 0 ? " AND c.rowid <> ".((int) $excludecontractid) : "");
+	// Custom urls
+	$listofsql[] = "SELECT ce.fk_object FROM ".MAIN_DB_PREFIX."contrat_extrafields as ce WHERE LOWER(ce.custom_url) IN (".$sqlinnames.")".($excludecontractid > 0 ? " AND ce.fk_object <> ".((int) $excludecontractid) : "");
+	// Website domain names (stored into the contract line description as "WebsiteRef=xxx, WebsiteDomainName=yyy")
+	$sqlwebsite = "SELECT cd.fk_contrat as fk_object FROM ".MAIN_DB_PREFIX."contratdet as cd WHERE (";
+	$sqlwebsite .= "LOWER(cd.description) LIKE '%websitedomainname=".$db->escape($db->escapeforlike($listofnames[0]))."'";
+	$sqlwebsite .= " OR LOWER(cd.description) LIKE '%websitedomainname=".$db->escape($db->escapeforlike($listofnames[1]))."')";
+	$sqlwebsite .= ($excludecontractid > 0 ? " AND cd.fk_contrat <> ".((int) $excludecontractid) : "");
+	$listofsql[] = $sqlwebsite;
+	// Deployment servers (the ref is a hostname like "withX.mydomain.com" used by deployment servers)
+	$sqldeploymentserver = "SELECT ts.rowid as fk_object FROM ".MAIN_DB_PREFIX."sellyoursaas_deploymentserver as ts";
+	$sqldeploymentserver .= " WHERE LOWER(ts.ref) IN (".$sqlinnames.") AND ts.entity IN (".getEntity('sellyoursaas_deploymentserver').")";
+	$listofsql[] = $sqldeploymentserver;
+
+	foreach ($listofsql as $sql) {
+		$resql = $db->query($sql.$db->plimit(1));
+		if (!$resql) {
+			return -1;
+		}
+		$obj = $db->fetch_object($resql);
+		if ($obj) {
+			return (int) $obj->fk_object;
+		}
+	}
+
+	return 0;
 }
 
 /**
@@ -490,7 +632,7 @@ function sellyoursaas_admin_prepare_head()
  * @param	string		$remoteip		User remote IP
  * @param	boolean		$whitelisted	Is the IP or email white listed ?
  * @param	string		$email			User remote email
- * @param	int			$checkcaptcha	Check also captcha (check will not be done when deploying from customer dashboard for exemple, where user is already logged)
+ * @param	int			$checkcaptcha	Check also captcha (check will not be done when deploying from customer dashboard for example, where user is already logged)
  * @return 	string[]					Array with ipquality (string with different scores), emailquality (string with different scores), vpnproba, abusetest, fraudscoreip, fraudscoreemail
  */
 function getRemoteCheck($remoteip, $whitelisted, $email, $checkcaptcha = 1)
@@ -689,6 +831,42 @@ function getRemoteCheck($remoteip, $whitelisted, $email, $checkcaptcha = 1)
 		}
 	}
 
+	// Evaluate VPN probability with VPNDetection
+	if (empty($abusetest) && getDolGlobalString('SELLYOURSAAS_VPNDETECTION_ON')) {
+		dol_syslog("getRemoteCheck Check using VPNDetection", LOG_DEBUG);
+
+		$url = 'https://api.vpndetection.io/'.urlencode($remoteip);
+		$result = getURLContent($url, 'GET', '', 1, array(), array('https'), 0);
+		$resultjson = (is_array($result) && $result['http_code'] == 200 && isset($result['content'])) ? json_decode($result['content'], true) : null;
+		if (is_array($resultjson) && isset($resultjson['is_vpn'])) {
+			// 1 for a VPN or a Tor exit, 0 otherwise. Keep the highest probability when GetIPIntel ran too.
+			$vpndetectionproba = (empty($resultjson['is_vpn']) && empty($resultjson['is_tor'])) ? 0 : 1;
+			if (!is_numeric($vpnproba) || $vpndetectionproba > $vpnproba) {
+				$vpnproba = $vpndetectionproba;
+			}
+			$ipquality .= 'vpnd-vpn='.(empty($resultjson['is_vpn']) ? 0 : 1).';vpnd-tor='.(empty($resultjson['is_tor']) ? 0 : 1).';';
+		} else {
+			$ipquality .= 'vpnd-check failed. http_code = '.dol_trunc(is_array($result) ? $result['http_code'] : '', 100).';';
+		}
+
+		// Refused if VPN probability from VPNDetection is too high
+		if (!$whitelisted && empty($abusetest) && getDolGlobalString('SELLYOURSAAS_VPN_PROBA_REFUSED')) {
+			$conf->global->SELLYOURSAAS_VPN_FRAUDSCORE_REFUSED = 85;
+
+			if (!getDolGlobalString('SELLYOURSAAS_IPQUALITY_ON')) {
+				$fraudscoreip = 99;		// no other test with IPQuality, so VPNDetection decides
+			} else {
+				$fraudscoreip = 1;		// IPQuality decides, we set a fraudscore always lower than the threshold
+			}
+
+			if (is_numeric($vpnproba) && $vpnproba >= (float) getDolGlobalString('SELLYOURSAAS_VPN_PROBA_REFUSED') && ($fraudscoreip >= (float) getDolGlobalString('SELLYOURSAAS_VPN_FRAUDSCORE_REFUSED'))) {
+				// Output the key "Instance creation blocked for"
+				dol_syslog("Instance creation blocked for ".$remoteip." - VPN probability ".$vpnproba." is higher or equal than " . getDolGlobalString('SELLYOURSAAS_VPN_PROBA_REFUSED').' with a fraudscore '.$fraudscoreip.' >= ' . getDolGlobalString('SELLYOURSAAS_VPN_FRAUDSCORE_REFUSED'));
+				$abusetest = 1;
+			}
+		}
+	}
+
 	// Evaluate VPN probability with IPQualityScore but also TOR or bad networks and email
 	if (getDolGlobalString('SELLYOURSAAS_IPQUALITY_ON') && empty($abusetest) && getDolGlobalString('SELLYOURSAAS_IPQUALITY_KEY')) {
 		dol_syslog("getRemoteCheck Check using IP Quality", LOG_DEBUG);
@@ -745,12 +923,12 @@ function getRemoteCheck($remoteip, $whitelisted, $email, $checkcaptcha = 1)
 				$jsonreponse = json_decode($result['content'], true);
 				dol_syslog("For ip ".$remoteip.": fraud_score=".$jsonreponse['fraud_score']." - is_crawler=".$jsonreponse['is_crawler']." - vpn=".$jsonreponse['vpn']." - recent_abuse=".$jsonreponse['recent_abuse']." - tor=".($jsonreponse['tor'] || $jsonreponse['active_tor']));
 				if ($jsonreponse['success']) {
-					if ($jsonreponse['recent_abuse'] && getDolGlobalString('SELLYOURSAAS_IPQUALITY_BLOCK_ABUSING_IP')) {	// Not recommanded if users are using shared IP
+					if ($jsonreponse['recent_abuse'] && getDolGlobalString('SELLYOURSAAS_IPQUALITY_BLOCK_ABUSING_IP')) {	// Not recommended if users are using shared IP
 						dol_syslog("Instance creation blocked for ".$remoteip." - This is an IP with recent abuse reported");
 						$abusetest = 2;
 					}
 					if ($jsonreponse['tor'] || $jsonreponse['active_tor']) {
-						// So recommanded that is it enabled always, no option to disable this
+						// So recommended that is it enabled always, no option to disable this
 						dol_syslog("Instance creation blocked for ".$remoteip." - This is a TOR or evil IP - host=".$jsonreponse['host']);
 						$abusetest = 3;
 					}
@@ -949,9 +1127,10 @@ function sellyoursaasGetNbUsersContract($contractref, $contractline, $codeextraf
 				$newcommentonqty .= '';
 			} else {
 				$error++;
-				dol_syslog('sellyoursaasGetNbUsersContract: SQL to get resources returns error for '.$object->ref.' - '.$producttmp->ref.' - '.$sqlformula);
-				//$this->error = 'sellyoursaasRemoteAction: SQL to get resources returns error for '.$object->ref.' - '.$producttmp->ref.' - '.$sqlformula;
-				//$this->errors[] = $this->error;
+				dol_syslog('sellyoursaasGetNbUsersContract: SQL to get resources returns error for '.$contract->ref.' - '.$sqlformula);
+			}
+			if ($newqty) {
+				$nbusersql = $newqty;
 			}
 		} else {
 			// If request is a SELECT nb, fieldlogin as comment
@@ -977,9 +1156,7 @@ function sellyoursaasGetNbUsersContract($contractref, $contractline, $codeextraf
 				$newcommentonqty .= 'User Accounts ('.$newqty.') : '.join(', ', $arrayofcomment)."\n";
 			} else {
 				$error++;
-				dol_syslog('sellyoursaasGetNbUsersContract: SQL to get resource list returns empty list for '.$object->ref.' - '.$producttmp->ref.' - '.$sqlformula);
-				//$this->error = 'sellyoursaasRemoteAction: SQL to get resource list returns empty list for '.$object->ref.' - '.$producttmp->ref.' - '.$sqlformula;
-				//$this->errors[] = $this->error;
+				dol_syslog('sellyoursaasGetNbUsersContract: SQL to get resource list returns empty list for '.$contract->ref.' - '.$sqlformula);
 			}
 			if ($newqty) {
 				$nbusersql = $newqty;
@@ -1014,7 +1191,8 @@ function sellyoursaasGetNbUsersContract($contractref, $contractline, $codeextraf
  * @param	Societe		$mythirdpartyaccount	Thirdparty
  * @return 	int									0 if trial mode, 1 if paid mode, 2 free mode
  */
-function sellyoursaasGetModeStatusInstance($contract, $mythirdpartyaccount){
+function sellyoursaasGetModeStatusInstance($contract, $mythirdpartyaccount)
+{
 	$modeinstancestatus = 0;
 	$ispaid = sellyoursaasIsPaidInstance($contract);
 	if ($ispaid) {
@@ -1025,4 +1203,31 @@ function sellyoursaasGetModeStatusInstance($contract, $mythirdpartyaccount){
 		}
 	}
 	return $modeinstancestatus;
+}
+
+/**
+ * Check if mandatory info are set
+ *
+ * @param Societe $mythirdpartyaccount		Thirdparty to test
+ * @return boolean
+ */
+function isMandatoryInfoSet($mythirdpartyaccount)
+{
+	$missing = 0;
+	if (empty($mythirdpartyaccount->array_options['options_firstname'])) {
+		$missing++;
+	}
+	if (empty($mythirdpartyaccount->array_options['options_lastname'])) {
+		$missing++;
+	}
+	if (!getDolGlobalInt('SELLYOURSAAS_ONLY_NON_PROFIT_ORGA')) {
+		if ($mythirdpartyaccount->tva_assuj && empty($mythirdpartyaccount->tva_intra) && !getDolGlobalString('SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE')) {
+			$missing++;
+		}
+		if ($mythirdpartyaccount->country_code == 'FR' && empty($mythirdpartyaccount->idprof1)) {
+			$missing++;
+		}
+	}
+
+	return !$missing;
 }

@@ -60,7 +60,7 @@ $res=0;
 if (! $res && ! empty($_SERVER["CONTEXT_DOCUMENT_ROOT"])) {
 	$res=@include $_SERVER["CONTEXT_DOCUMENT_ROOT"]."/main.inc.php";
 }
-// Try main.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try main.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -83,13 +83,21 @@ if (! $res) {
 	die("Include of main fails");
 }
 
+/**
+ * @var Database	$db
+ * @var Conf		$conf
+ * @var Translate 	$langs
+ * @var string 		$urllogo
+ */
+
 require_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
 require_once DOL_DOCUMENT_ROOT.'/contrat/class/contrat.class.php';
+dol_include_once('sellyoursaas/class/deploymentserver.class.php');
 
 
-$instance = GETPOST('instance');	// example: testldr3.with.mysaasdomainname.com
+$instance = GETPOST('instance', 'aZ09');	// example: testldr3.with.mysaasdomainname.com
 
 // SEarch instance
 $contract = new Contrat($db);
@@ -121,7 +129,7 @@ if ($langs->defaultlang == 'en_US') {
 }
 
 
-if (preg_match('/^http/i', $contract->array_options['options_suspendmaintenance_message'])) {
+if (!empty($contract->array_options['options_suspendmaintenance_message']) && preg_match('/^http/i', $contract->array_options['options_suspendmaintenance_message'])) {
 	dol_syslog("Maintenance mode is on for ".$contract->ref_customer." with a redirect to ".$contract->array_options['options_suspendmaintenance_message']);
 	header("Location: ".$contract->array_options['options_suspendmaintenance_message']);
 	exit;
@@ -145,7 +153,27 @@ top_htmlhead('', 'Suspension Page');
 <?php
 print $langs->trans("SorryInstanceSuspended", dol_escape_htmltag($instance));
 print '<br>';
-print '<a href="https://'.dol_escape_htmltag($instance).'">'.$langs->trans("ClickToCheckAgain").'</a><br>';
+// Show a link only if instance is a name into one of the managed domains
+$isanurlofasellyoursaasinstance = false;
+if (!getDolGlobalString('SELLYOURSAAS_OBJECT_DEPLOYMENT_SERVER_MIGRATION')) {
+	$tmparray = explode(',', getDolGlobalString('SELLYOURSAAS_SUB_DOMAIN_NAMES'));
+} else {
+	$staticdeploymentserver = new Deploymentserver($db);
+	$tmparray = $staticdeploymentserver->fetchAllDomains();
+}
+foreach ($tmparray as $tmp) {
+	$newtmp = preg_replace('/:.*$/', '', $tmp);
+	if ($newtmp && preg_match('/'.preg_quote('.'.$newtmp, '/').'$/i', $instance)) {
+		$isanurlofasellyoursaasinstance = true;
+		break;
+	}
+}
+
+if ($isanurlofasellyoursaasinstance) {
+	print '<a href="https://'.dol_escape_htmltag($instance).'">'.$langs->trans("ClickToCheckAgain").'</a><br>';
+} else {
+	print $langs->trans("PleaseWaitAndCheckAgainLater").'<br>';
+}
 print '<br>';
 print '<br>';
 print $langs->trans("GoOnYourDashboardToGetMoreInfo", $_SERVER['SERVER_NAME'], $_SERVER['SERVER_NAME']);

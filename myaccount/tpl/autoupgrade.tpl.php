@@ -15,6 +15,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ */
+
 // Protection to avoid direct call of template
 if (empty($conf) || ! is_object($conf)) {
 	print "Error, template page can't be called as URL";
@@ -33,7 +40,7 @@ dol_include_once('sellyoursaas/class/sellyoursaascontract.class.php');
 
 
 $upload_dir = $conf->sellyoursaas->dir_temp."/autoupgrade_".$mythirdpartyaccount->id.'.tmp';
-$backtopagesupport = GETPOST("backtopagesupport", 'alpha') ? GETPOST("backtopagesupport", 'alpha') : $_SERVER["PHP_SELF"].'?action=presend&mode=support&backfromautoupgrade=backfromautoupgrade&token='.newToken().'&contractid='.GETPOST('contractid', 'alpha').'&supportchannel='.GETPOST('supportchannel', 'alpha').'&ticketcategory_child_id='.(GETPOST('ticketcategory_child_id_back', 'alpha') ? GETPOST('ticketcategory_child_id', 'alpha') : '').'&ticketcategory='.(GETPOST('ticketcategory_back', 'alpha') ? GETPOST('ticketcategory', 'alpha') : '').'&subject='.(GETPOST('subject_back', 'alpha') ? GETPOST('subject', 'alpha') : '').'#supportform';
+$backtopagesupport = GETPOST("backtopagesupport", 'alpha') ? GETPOST("backtopagesupport", 'alpha') : $_SERVER["PHP_SELF"].'?action=presend&token='.newToken().'&mode=support&backfromautoupgrade=backfromautoupgrade&contractid='.GETPOST('contractid', 'alpha').'&supportchannel='.GETPOST('supportchannel', 'alpha').'&ticketcategory_child_id='.(GETPOST('ticketcategory_child_id_back', 'alpha') ? GETPOST('ticketcategory_child_id', 'alpha') : '').'&ticketcategory='.(GETPOST('ticketcategory_back', 'alpha') ? GETPOST('ticketcategory', 'alpha') : '').'&subject='.(GETPOST('subject_back', 'alpha') ? GETPOST('subject', 'alpha') : '').'#supportform';
 $arraybacktopage=explode("&", $backtopagesupport);
 $ticketcategory_child_id = "";
 $ticketcategory = "";
@@ -170,7 +177,7 @@ if ($action == "autoupgrade") {
 	$utils = new Utils($db);
 	$sellyoursaasutils = new SellYourSaasUtils($db);
 
-	// If error occurs this is usefull to redirect to support page
+	// If error occurs this is useful to redirect to support page
 	$keyticketcategory_child_id = array_keys(preg_grep('/ticketcategory_child_id.*/', $arraybacktopage))[0];
 	$keyticketcategory = array_keys(preg_grep('/ticketcategory=.*/', $arraybacktopage))[0];
 	$ticketcategory_child_id = explode("=", $arraybacktopage[$keyticketcategory_child_id])[1];
@@ -237,7 +244,13 @@ if ($action == "autoupgrade") {
 			$confinstance->setValues($newdb);
 			$lastinstallinstance = isset($confinstance->global->MAIN_VERSION_LAST_INSTALL) ? explode(".", $confinstance->global->MAIN_VERSION_LAST_INSTALL)[0] : "0";
 			$lastupgradeinstance = isset($confinstance->global->MAIN_VERSION_LAST_UPGRADE) ? explode(".", $confinstance->global->MAIN_VERSION_LAST_UPGRADE)[0] : "0";
-			$lastversiondolibarrinstance = max($lastinstallinstance, $lastupgradeinstance);
+			// Values come from the tenant database, so they must be validated before being sent to the root upgrade script
+			if (!ctype_digit((string) $lastinstallinstance) || !ctype_digit((string) $lastupgradeinstance)) {
+				$errortab[] = $langs->trans("ErrorInvalidVersionInInstance");
+				$errors++;
+			} else {
+				$lastversiondolibarrinstance = max((int) $lastinstallinstance, (int) $lastupgradeinstance);
+			}
 		}
 
 		if ($dataofcontract['appproductid'] > 0) {
@@ -250,7 +263,7 @@ if ($action == "autoupgrade") {
 			foreach ($filelist as $key => $value) {
 				$version = explode("-", $value["name"])[1];
 				$version = explode(".", $version)[0];
-				$laststableupgradeversion = max($laststableupgradeversion, $version);
+				$laststableupgradeversion = max($laststableupgradeversion, (int) $version);
 			}
 			$object->array_options["dirforexampleforsources"] = $dirforexampleforsources;
 			$object->array_options["laststableupgradeversion"] = $laststableupgradeversion;
@@ -444,6 +457,7 @@ if ($action == "instanceverification") {
 	}
 
 	print '<form action="'.$_SERVER["PHP_SELF"].'#Step'.($stepautoupgrade+1).'" method="GET">';
+	print '<input type="hidden" name="token" value="'.newToken().'">';
 	print '<input type="hidden" name="backtopagesupport" value="'.$backtopagesupport.'">';
 	print '<input type="hidden" name="action" value="'.($stepautoupgrade == 2 ? 'instanceverification' : 'view').'">';
 	print '<input type="hidden" name="mode" value="autoupgrade">';

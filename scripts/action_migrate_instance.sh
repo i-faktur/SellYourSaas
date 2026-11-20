@@ -14,18 +14,17 @@ export now=`date +'%Y-%m-%d %H:%M:%S'`
 echo
 echo
 echo "####################################### ${0} ${1}"
-echo "${0} ${@}"
+echo "${0} ${1} ... (other parameters not shown, they contain passwords)"
 echo "# user id --------> $(id -u)"
 echo "# now ------------> $now"
 echo "# PID ------------> ${$}"
-echo "# PWD ------------> $PWD" 
+echo "# PWD ------------> $PWD"
 #echo "# arguments ------> ${@}"
 echo "# parent path ----> ${0%/*}"
 echo "# realname name --> $(basename $(realpath ${0}))"
 echo "# realname dir ---> $(dirname $(realpath ${0}))"
 
 export PID=${$}
-export ZONES_PATH="/etc/bind/zones"
 export scriptdir=$(dirname $(realpath ${0}))
 
 # possibility to change the directory of vhostfile templates
@@ -139,7 +138,7 @@ export directaccess=${38}
 export sshaccesstype=${39}
 
 export automigrationtmpdir=${41}
-export automigrationdocumentarchivename=${42}
+export automigrationdocumentarchivename=${42//£/ }
 
 export CUSTOMDOMAIN=${46}
 
@@ -167,9 +166,9 @@ if [[ "x$webSSLCertificateIntermediate" == "x" ]]; then
 fi
 
 # possibility to change the path of sellyoursass directory
-olddoldataroot=`grep '^olddoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-newdoldataroot=`grep '^newdoldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
-if [[ "x$olddoldataroot" != "x" && "x$newdoldataroot" != "x" ]]; then
+olddoldataroot="/home/admin/wwwroot/dolibarr_documents"
+newdoldataroot=`grep '^doldataroot=' /etc/sellyoursaas.conf | cut -d '=' -f 2`
+if [[ "x$newdoldataroot" != "x" ]]; then
 	fileforconfig1=${fileforconfig1/$olddoldataroot/$newdoldataroot}
 	dirwithdumpfile=${dirwithdumpfile/$olddoldataroot/$newdoldataroot}
 	dirwithsources1=${dirwithsources1/$olddoldataroot/$newdoldataroot}
@@ -190,11 +189,11 @@ echo "fileforconfig1 = $fileforconfig1"
 echo "targetdir = $targetdir"
 echo "EMAILTO = $EMAILTO"
 echo "REMOTEIP = $REMOTEIP"
-echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL" 
-echo "instancenameold = $instancenameold" 
+echo "SELLYOURSAAS_ACCOUNT_URL = $SELLYOURSAAS_ACCOUNT_URL"
+echo "instancenameold = $instancenameold"
 echo "domainnameold = $domainnameold"
 echo "customurl = $customurl"
-echo "contractlineid = $contractlineid" 
+echo "contractlineid = $contractlineid"
 echo "EMAILFROM = $EMAILFROM"
 echo "CERTIFFORCUSTOMDOMAIN = $CERTIFFORCUSTOMDOMAIN"
 echo "archivedir = $archivedir"
@@ -230,9 +229,15 @@ if [[ "$mode" == "migrate" ]]; then
 			cd $automigrationtmpdir
 			case "$automigrationdocumentarchivename" in
 					*.zip)
-							echo "unzip $automigrationdocumentarchivename -r $instancedir/documents/"
-							unzip $automigrationdocumentarchivename -r "$instancedir/"
-							if [ $? -eq 0 ]
+							# Extract as the instance user (never as root) from a copy readable by this user
+							automigrationziptmp=$(mktemp)
+							cat "$automigrationdocumentarchivename" > "$automigrationziptmp"
+							chown $osusername "$automigrationziptmp"
+							echo "runuser -u $osusername -- unzip -o $automigrationziptmp -d $instancedir/"
+							runuser -u "$osusername" -- unzip -o "$automigrationziptmp" -d "$instancedir/"
+							unzipresult=$?
+							rm -f "$automigrationziptmp"
+							if [ $unzipresult -eq 0 ]
 							then
 									echo "Successfully file migration"
 							else
@@ -241,8 +246,9 @@ if [[ "$mode" == "migrate" ]]; then
 							fi
 							;;
 					*.tbz2|*.tar.bz2)
-							echo "tar -C $instancedir/documents/ -xjvf $automigrationdocumentarchivename"
-							tar -C "$instancedir/" -xjvf $automigrationdocumentarchivename
+							# Extract as the instance user (never as root) so owner and permissions of archive are not restored
+							echo "runuser -u $osusername -- tar -C $instancedir/ --no-same-owner --no-same-permissions -xjvf - < $automigrationdocumentarchivename"
+							runuser -u "$osusername" -- tar -C "$instancedir/" --no-same-owner --no-same-permissions -xjvf - < "$automigrationdocumentarchivename"
 							if [ $? -eq 0 ]
 							then
 									echo "Successfully file migration"
@@ -252,8 +258,9 @@ if [[ "$mode" == "migrate" ]]; then
 							fi
 							;;
 					*.tgz|*.tar.gz)
-							echo "tar -C $instancedir/documents/ -zxvf $automigrationdocumentarchivename"
-							tar -C "$instancedir/" -zxvf $automigrationdocumentarchivename
+							# Extract as the instance user (never as root) so owner and permissions of archive are not restored
+							echo "runuser -u $osusername -- tar -C $instancedir/ --no-same-owner --no-same-permissions -zxvf - < $automigrationdocumentarchivename"
+							runuser -u "$osusername" -- tar -C "$instancedir/" --no-same-owner --no-same-permissions -zxvf - < "$automigrationdocumentarchivename"
 							if [ $? -eq 0 ]
 							then
 									echo "Successfully file migration"
@@ -263,7 +270,7 @@ if [[ "$mode" == "migrate" ]]; then
 							fi
 							;;
 			esac
-			
+
 			# Set user owner instead of root used to copy files
 			echo "chown -R $osusername:$osusername $instancedir/documents"
             chown -R $osusername:$osusername "$instancedir/documents"

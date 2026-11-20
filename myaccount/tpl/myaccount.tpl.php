@@ -15,6 +15,15 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ *
+ * @var Societe $mythirdpartyaccount
+ */
+
 // Protection to avoid direct call of template
 if (empty($conf) || ! is_object($conf)) {
 	print "Error, template page can't be called as URL";
@@ -62,7 +71,7 @@ print '
 	            <div class="caption-subject font-green-sharp bold uppercase">'.$langs->trans("Organization").' <small>('.$langs->trans("Code").' '.dolPrintHTML($mythirdpartyaccount->code_client).')</small></div>
 	          </div>
 	          <div class="portlet-body">
-
+				<!-- form for company profile -->
 	            <form action="'.$_SERVER["PHP_SELF"].'" method="post" name="formsoc">
 	            <input type="hidden" name="token" value="'.newToken().'">
 				<input type="hidden" name="action" value="updatemythirdpartyaccount">
@@ -72,91 +81,144 @@ print '
 
 	                <div class="form-group">
 	                  <label>'.$langs->trans("NameOfCompany").'</label>
-	                  <input type="text" class="form-control" placeholder="'.$langs->trans("NameOfYourOrganization").'" value="'.$mythirdpartyaccount->name.'" name="orgName">
+	                  <input type="text" class="form-control" placeholder="'.$langs->trans("NameOfYourOrganization").'" value="'.$mythirdpartyaccount->name.'" name="orgName" spellcheck="false">
 	                </div>
 
 	                <div class="form-group">
 	                  <label>'.$langs->trans("AddressLine").'</label>
-	                  <textarea class="form-control" placeholder="'.$langs->trans("HouseNumberAndStreet").'" name="address">'.$mythirdpartyaccount->address.'</textarea>
+	                  <textarea class="form-control" placeholder="'.$langs->trans("HouseNumberAndStreet").'" name="address" spellcheck="false" >'.$mythirdpartyaccount->address.'</textarea>
 	                </div>
 	                <div class="form-group">
 	                  <label>'.$langs->trans("Town").'</label>
-	                  <input type="text" class="form-control" value="'.$mythirdpartyaccount->town.'" name="town">
+	                  <input type="text" class="form-control" value="'.$mythirdpartyaccount->town.'" name="town" spellcheck="false">
 	                </div>
 	                <div class="form-group">
 	                  <label>'.$langs->trans("Zip").'</label>
-	                  <input type="text" class="form-control input-small" value="'.$mythirdpartyaccount->zip.'" name="zip">
+	                  <input type="text" class="form-control input-small" value="'.$mythirdpartyaccount->zip.'" name="zip" spellcheck="false">
 	                </div>
 	                <div class="form-group">
 	                  <label>'.$langs->trans("StateOrCounty").'</label>
-	                  <input type="text" class="form-control" name="stateorcounty" value="">
+	                  <input type="text" class="form-control" name="stateorcounty" value="" spellcheck="false">
 	                </div>
 	                <div class="form-group">
-	                  <label>'.$langs->trans("Country").'</label><br>';
+	                  <label>'.$langs->trans("Country").'</label> &nbsp; ';
 					$countryselected = (GETPOSTISSET('country_id') ? GETPOST('country_id', 'aZ09') : $mythirdpartyaccount->country_id);
 					$exclude_country_code = array();
-					if (getDolGlobalString('SELLYOURSAAS_EXCLUDE_COUNTRY_CODES')) {
-						$exclude_country_code = explode(',', getDolGlobalString('SELLYOURSAAS_EXCLUDE_COUNTRY_CODES'));
-					}
+if (getDolGlobalString('SELLYOURSAAS_EXCLUDE_COUNTRY_CODES')) {
+	$exclude_country_code = explode(',', getDolGlobalString('SELLYOURSAAS_EXCLUDE_COUNTRY_CODES'));
+}
 					print '<input type="hidden" name="country_id_old" value="'.$countryselected.'">'."\n";
 					print $form->select_country($countryselected, 'country_id', '', 0, 'minwidth300', 'code2', 0, 1, 0, $exclude_country_code);
 					print '</div>'."\n";
 
-					if (!getDolGlobalInt('SELLYOURSAAS_ONLY_NON_PROFIT_ORGA')) {
-						print '<div class="form-group">
+
+if (!getDolGlobalInt('SELLYOURSAAS_ONLY_NON_PROFIT_ORGA')) {
+	// VAT Section
+	print '<div class="form-group"><br>
 	                                  <label>'.$langs->trans("VATIntra").'</label> ';
-						if (! empty($mythirdpartyaccount->tva_assuj) && empty($mythirdpartyaccount->tva_intra)) {
-							print img_warning($langs->trans("Mandatory"), '', 'hideifnonassuj');
-						}
+	if (! empty($mythirdpartyaccount->tva_assuj) && empty($mythirdpartyaccount->tva_intra)) {
+		print img_warning($langs->trans("Mandatory"), '', 'hideifnonassuj');
+	}
 
-						$placeholderforvat='';
-						if ($mythirdpartyaccount->country_code == 'FR') {
-							$placeholderforvat='Exemple: FR12345678';
-						} elseif ($mythirdpartyaccount->country_code == 'BE') {
-							$placeholderforvat='Exemple: BE12345678';
-						} elseif ($mythirdpartyaccount->country_code == 'ES') {
-							$placeholderforvat='Exemple: ES12345678';
-						} else {
-							$placeholderforvat=$langs->trans("EnterVATHere");
-						}
+	$placeholderforvat='';
+	if ($mythirdpartyaccount->country_code == 'FR') {
+		$placeholderforvat='Exemple: FR12345678';
+	} elseif ($mythirdpartyaccount->country_code == 'BE') {
+		$placeholderforvat='Exemple: BE12345678';
+	} elseif ($mythirdpartyaccount->country_code == 'ES') {
+		$placeholderforvat='Exemple: ES12345678';
+	} else {
+		$placeholderforvat=$langs->trans("EnterVATHere");
+	}
 
-						print '
+	print '
 							<br>
-		                  <input type="hidden" name="vatassuj_old" value="'.($mythirdpartyaccount->tva_assuj).'">
+		                  <input type="hidden" name="vatassuj_old" value="'.$mythirdpartyaccount->tva_assuj.'">
 		                  <input type="checkbox" style="margin-bottom: 3px;" class="inline-block valignmiddle"'.($mythirdpartyaccount->tva_assuj ? ' checked="checked"' : '').' id="vatassuj" name="vatassuj"> <label for="vatassuj" class="valignmiddle nobold">'.$langs->trans("IHaveAVATID").'</label>
 							<br>
 		                  <input type="hidden" name="vatnumber_old" value="'.$mythirdpartyaccount->tva_intra.'">
-		                  <input type="text" class="input-small quatrevingtpercent hideifnonassuj" value="'.$mythirdpartyaccount->tva_intra.'" name="vatnumber" id="vatnumber" placeholder="'.$placeholderforvat.'">
+		                  <input type="text" class="input-small quatrevingtpercent hideifnonassuj" value="'.$mythirdpartyaccount->tva_intra.'" name="vatnumber" id="vatnumber" spellcheck="false" placeholder="'.$placeholderforvat.'">
 		                    ';
-						print "\n";
-						print '<script>';
-						print '$( document ).ready(function() {'."\n";
-						print '$("#vatnumber").keyup(function() {'."\n";
-						print "   console.log('We change the vatnumber='+$('#vatnumber').val());\n";
-						print "   if ($('#vatnumber').val() != '')  { $('#vatassuj').prop('checked', true ); }\n";
-						print '});'."\n";
-						print '});'."\n";
-						print '</script>';
-						print "\n";
+	print "\n";
+	print '<script>';
+	print '$( document ).ready(function() {'."\n";
+	print '$("#vatnumber").keyup(function() {'."\n";
+	print "   console.log('We change the vatnumber='+$('#vatnumber').val());\n";
+	print "   if ($('#vatnumber').val() != '')  { $('#vatassuj').prop('checked', true ); }\n";
+	print '});'."\n";
+	print '});'."\n";
+	print '</script>';
+	print "\n";
 
-						if (!getDolGlobalString('MAIN_DISABLEVATCHECK') && $mythirdpartyaccount->isInEEC() && (GETPOST('admin', 'alpha'))) {
-							if (! empty($conf->use_javascript_ajax)) {
-								print "\n";
-								print '<script language="JavaScript" type="text/javascript">';
-								print "function CheckVAT(a) {\n";
-								print "newpopup('".DOL_URL_ROOT."/societe/checkvat/checkVatPopup.php?vatNumber='+a,'".dol_escape_js($langs->trans("VATIntraCheckableOnEUSite"))."', 540, 350);\n";
-								print "}\n";
-								print '</script>';
-								print "\n";
-								$s.='<a href="#" class="hideonsmartphone" onclick="javascript: CheckVAT(document.formsoc.vatnumber.value);">'.$langs->trans("VATIntraCheck").'</a>';
-								$s = $form->textwithpicto($s, $langs->trans("VATIntraCheckDesc", $langs->transnoentitiesnoconv("VATIntraCheck")), 1);
-							} else {
-								$s.='<a href="'.$langs->transcountry("VATIntraCheckURL", $mythirdpartyaccount->country_id).'" target="_blank">'.img_picto($langs->trans("VATIntraCheckableOnEUSite"), 'help').'</a>';
-							}
-							print $s;
-						}
-						print '</div>'."\n";
-					}
+	if (!getDolGlobalString('MAIN_DISABLEVATCHECK') && $mythirdpartyaccount->isInEEC() && (GETPOST('admin', 'alpha'))) {
+		if (! empty($conf->use_javascript_ajax)) {
+			print "\n";
+			print '<script language="JavaScript" type="text/javascript">';
+			print "function CheckVAT(a) {\n";
+			print "newpopup('".DOL_URL_ROOT."/societe/checkvat/checkVatPopup.php?vatNumber='+a,'".dol_escape_js($langs->trans("VATIntraCheckableOnEUSite"))."', 540, 350);\n";
+			print "}\n";
+			print '</script>';
+			print "\n";
+			$s.='<a href="#" class="hideonsmartphone" onclick="javascript: CheckVAT(document.formsoc.vatnumber.value);">'.$langs->trans("VATIntraCheck").'</a>';
+			$s = $form->textwithpicto($s, $langs->trans("VATIntraCheckDesc", $langs->transnoentitiesnoconv("VATIntraCheck")), 1);
+		} else {
+			$s.='<a href="'.$langs->transcountry("VATIntraCheckURL", $mythirdpartyaccount->country_id).'" target="_blank">'.img_picto($langs->trans("VATIntraCheckableOnEUSite"), 'help').'</a>';
+		}
+		print $s;
+	}
+	print '</div>'."\n";
+
+
+	$placeholderforprofid = '';
+
+	// ID Prof section
+	$mandatoryprofid = 0;
+	if ($mythirdpartyaccount->country_code == 'FR') {
+		//$placeholderforprofid='Exemple: FR12345678';
+		$mandatoryprofid = 1;
+	} elseif ($mythirdpartyaccount->country_code == 'BE') {
+		//$placeholderforprofid='Exemple: BE12345678';
+	} elseif ($mythirdpartyaccount->country_code == 'ES') {
+		//$placeholderforprofid='Exemple: ES12345678';
+	} else {
+		//$placeholderforprofid=$langs->trans("EnterVATHere");
+	}
+
+	print '<div class="form-group"><br>
+	                                  <label>'.$langs->transcountry("ProfId1Short", $mythirdpartyaccount->country_code).'</label> ';
+	if ($mandatoryprofid && empty($mythirdpartyaccount->idprof1)) {
+		print img_warning($langs->trans("Mandatory"), '', 'hideifnoprof');
+	}
+
+	print '
+							<br>
+		                  <input type="hidden" name="profid_old" value="'.$mythirdpartyaccount->idprof1.'">
+		                  <input type="text" class="input-small quatrevingtpercent" value="'.$mythirdpartyaccount->idprof1.'" name="profid" id="profid" spellcheck="false" placeholder="'.$placeholderforprofid.'">
+		                    ';
+	print "\n";
+	/*
+	print '<script>';
+	print '$( document ).ready(function() {'."\n";
+	print '$("#profid").keyup(function() {'."\n";
+	print "   console.log('We change the profid='+$('#profid').val());\n";
+	print "   if ($('#profid').val() != '')  { $('#profid').prop('checked', true ); }\n";
+	print '});'."\n";
+	print '});'."\n";
+	print '</script>';
+	print "\n";
+	*/
+
+	print '</div>'."\n";
+
+	// Option to receive invoices through the e-invoicing channel (France only)
+	if (isModEnabled('einvoicing') && !getDolGlobalString('EINVOICING_DISABLE_SYNC_DOLI_TO_AP') && $mythirdpartyaccount->country_code == 'FR') {
+		print '<div class="form-group paddingtop">'."\n";
+		print '<input type="hidden" name="enable_invoicing_shown" value="1">'."\n";
+		print '<input type="checkbox" class="form-control inline valignmiddle" style="margin-top: 0" value="1"'.(empty($mythirdpartyaccount->array_options['options_enable_invoicing']) ? '' : ' checked').' id="enable_invoicing" name="enable_invoicing">'."\n";
+		print '<label for="enable_invoicing" class="valignmiddle nobold inline">'.$form->textwithpicto($langs->trans("SendMeTheEInvoice"), $langs->trans("SendMeTheEInvoiceHelp")).'</label>'."\n";
+		print '</div>'."\n";
+	}
+}
 
 				print '
 	              </div>
@@ -223,8 +285,8 @@ print '
 
 	              <div class="form-body">
 	                <div class="form-group">
-	                  <label>'.img_picto('', 'email', 'class="paddingright"').$langs->trans("Email").'</label>
-	                  <input type="text" class="form-control" value="'.((GETPOSTISSET('email') && GETPOST('email')) ? GETPOST('email') : $mythirdpartyaccount->email).'" name="email">
+	                  <label>'.img_picto('', 'email', 'class="paddingright"').$langs->trans("Email").' <small class="opacitymedium">('.$langs->trans("CustomerDashboardLogin").')</small></label>
+	                  <input type="text" class="form-control" value="'.((GETPOSTISSET('email') && GETPOST('email')) ? GETPOST('email') : $mythirdpartyaccount->email).'" name="email" spellcheck="false">
 	                  <input type="hidden" class="form-control" value="'.$mythirdpartyaccount->email.'" name="oldemail">
 					</div>
 					<div class="form-group">
@@ -241,7 +303,7 @@ if (empty($mythirdpartyaccount->array_options['options_firstname'])) {
 }
 					print '
 							<br>
-	                      <input type="text" class="inline-block" value="'.$mythirdpartyaccount->array_options['options_firstname'].'" name="firstName">
+	                      <input type="text" class="inline-block" value="'.$mythirdpartyaccount->array_options['options_firstname'].'" name="firstName" spellcheck="false">
 	                    </div>
 	                  </div>
 	                  <div class="col-md-6">
@@ -251,17 +313,22 @@ if (empty($mythirdpartyaccount->array_options['options_lastname'])) {
 	print img_warning($langs->trans("Mandatory"));
 }
 					print '<br>
-	                      <input type="text" class="inline-block" value="'.$mythirdpartyaccount->array_options['options_lastname'].'" name="lastName">
+	                      <input type="text" class="inline-block" value="'.$mythirdpartyaccount->array_options['options_lastname'].'" name="lastName" spellcheck="false">
 	                    </div>
 	                  </div>
-	                </div>
+	                </div>';
+
+// Add input for the CC invoice
+if ($mythirdpartyaccount->array_options['options_checkboxnonprofitorga'] != 'nonprofit' || !getDolGlobalInt("SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE")) {
+					print '
 	                <div class="form-group">
 	                  <label>'.img_picto('', 'email', 'class="paddingright opacitymedium"').$form->textwithpicto($langs->trans("EmailCCInvoices"), $langs->trans("KeepEmptyToUseMainEmail"), 1, 'help', 'opacitymedium').'</label>
 	                  <input type="text" class="form-control" value="'.(GETPOSTISSET('emailccinvoice') ? GETPOST('emailccinvoice') : $mythirdpartyaccount->array_options['options_emailccinvoice']).'" name="emailccinvoice">
 	                  <input type="hidden" class="form-control" value="'.$mythirdpartyaccount->array_options['options_emailccinvoice'].'" name="oldemailccinvoice">
 					</div>
-
 					';
+}
+
 if (getDolGlobalString('SELLYOURSAAS_ENABLE_OPTINMESSAGES')) {
 	print '
 		                <div class="form-group paddingtop">
@@ -314,6 +381,22 @@ if (getDolGlobalString('SELLYOURSAAS_ENABLE_OPTINMESSAGES')) {
 
 
 			';
+
+// Second factor settings (enrollment UI): entirely provided by whichever
+// module implements the 'mainmyaccountloginpage' hook context's
+// printSecondFactorSettings method (e.g. twofactorauth) - this template has
+// no knowledge of TOTP/WebAuthn or any other specific mechanism, and does
+// not need to know whether any such module is even installed or enabled: if
+// none is listening, or the feature is toggled off, the hook simply returns
+// empty output - that decision belongs entirely to the listening module.
+if (!is_object($hookmanager)) {
+	include_once DOL_DOCUMENT_ROOT.'/core/class/hookmanager.class.php';
+	$hookmanager = new HookManager($db);
+}
+
+$parameters = array('socid' => $mythirdpartyaccount->id, 'mainmyaccountloginpage' => 1);
+$hookmanager->executeHooks('printSecondFactorSettings', $parameters);
+print $hookmanager->resPrint;
 
 if (! GETPOST('deleteaccount')) {
 	print '<div class="center"><br><a href="#deletemyaccountarea" class="deletemyaccountclick"><span class="fa fa-trash paddingright"></span>'.$langs->trans("DeleteMyAccount").'...</a><br><br><br></div>';

@@ -80,7 +80,7 @@ if (empty($dolibarrdir)) {
 
 // Load Dolibarr environment
 $res=0;
-// Try master.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try master.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -112,14 +112,21 @@ if (! $res && file_exists($dolibarrdir."/htdocs/master.inc.php")) {
 	$res=@include $dolibarrdir."/htdocs/master.inc.php";
 }
 if (! $res) {
-	print("Include of master fails");
+	print("Include of master fails\n");
 	exit(-1);
 }
+/**
+ * @var Conf $conf
+ *
+ * @var string	$dolibarr_main_restrict_os_commands
+ */
 include_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/lib/functions.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/class/utils.class.php';
 dol_include_once("/sellyoursaas/core/lib/sellyoursaas.lib.php");
 dol_include_once("/sellyoursaas/lib/sellyoursaas.lib.php");
+
+$dolibarr_main_restrict_os_commands = ($dolibarr_main_restrict_os_commands ? $dolibarr_main_restrict_os_commands.', php' : '');
 
 // Read /etc/sellyoursaas.conf file
 $domain='';
@@ -360,9 +367,10 @@ if (preg_match('/:/', $dirroot)) {	// $dirroot = 'remoteserer:/mnt/diskbackup/ba
 	print 'rsync -r admin@'.$dirroot.' /tmp/restore_instance'."\n";
 	$command="rsync";
 	$param=array();
-	if ($mode != 'confirm' && $mode != 'confirmrsync') {
-		$param[]="-n";
-	}
+	// We disable -n, this operation is safe
+	//if ($mode != 'confirm' && $mode != 'confirmrsync') {
+	//	$param[]="-n";
+	//}
 	//$param[]="-a";
 	$param[]="-rltz";
 	//$param[]="-vv";
@@ -432,14 +440,14 @@ if (preg_match('/:/', $dirroot)) {	// $dirroot = 'remoteserer:/mnt/diskbackup/ba
 	if ($mode == 'test') {
 		print "\n";
 		print "Simulation has finished to copy files from the backup server in local /tmp/restore_instance.\n";
-		print "You must now re-run this same script in 'confirm' mode...\n";
+		print "You should, after this, run the script from user 'admin' with this parameters:\n";
 	} else {
 		print "\n";
 		print "Data have been copied from the backup server in local /tmp/restore_instance.\n";
 		print "You must now run the script from user 'admin' with this parameters:\n";
-
-		print __FILE__." /tmp/restore_instance/".$fromusername."/".$fromdbname." autoscan ".$instance." ".$mode."\n";
 	}
+	print __FILE__." /tmp/restore_instance/".$fromusername."/".$fromdbname." autoscan ".$instance." ".$mode."\n";
+
 	print "\n";
 
 	exit(0);
@@ -494,6 +502,8 @@ if ($mode == 'testrsync' || $mode == 'test' || $mode == 'confirmrsync' || $mode 
 	$param[]="--exclude 'conf.php'";			// a conf file for dolibarr
 	$param[]="--exclude 'config_db.php'";		// a conf file for glpi
 	$param[]="--exclude 'downstream.php'";		// a conf file for glpi
+	$param[]="--exclude 'install.lock";
+	$param[]="--exclude 'installmodules.lock";
 	$param[]="--exclude .buildpath";
 	$param[]="--exclude .git";
 	$param[]="--exclude .gitignore";
@@ -603,46 +613,54 @@ if ($mode == 'testdatabase' || $mode == 'test' || $mode == 'confirmdatabase' || 
 	$newdatabasedb = $object->database_db;
 	$utils = new Utils($db);
 
-	// Drop llx_accounting_account (if it exists)
-	$fullcommanddropa='echo "drop table llx_accounting_account;" | mysql -A -h '.$newserverbase.' -u '.$newloginbase.' -p'.$newpasswordbase.' -D '.$newdatabasedb;
-	$output=array();
-	$return_var=0;
-	print dol_print_date(dol_now('gmt'), "%Y%m%d-%H%M%S", 'gmt').' Drop table to prevent load error with '.$fullcommanddropa."\n";
-	if ($mode == 'confirm' || $mode == 'confirmdatabase') {
-		$outputfile = $conf->admin->dir_temp.'/out.tmp';
-		$resultarray = $utils->executeCLI($fullcommanddropa, $outputfile, 0, null, 1);
-
-		$return_var = $resultarray['result'];
-		$content_grabbed = $resultarray['output'];
-
-		print $content_grabbed."\n";
-		// If table already not exist, return_var is 1
-		// If technical error, return_var is also 1, so we disable this test
-		/*if ($return_var) {
-			print "Error on droping table into the new instance\n";
-			exit(-2);
-		}*/
+	$fordolibarr = 1;
+	if (preg_match('/glpi.*\.cloud/', $object->ref_customer)) {
+		$fordolibarr = 0;
+		$forglpi = 1;
 	}
 
-	// Drop llx_accounting_system (if it exists)
-	$fullcommanddropb='echo "drop table llx_accounting_system;" | mysql -A -h '.$newserverbase.' -u '.$newloginbase.' -p'.$newpasswordbase.' -D '.$newdatabasedb;
-	$output=array();
-	$return_var=0;
-	print dol_print_date(dol_now('gmt'), "%Y%m%d-%H%M%S", 'gmt').' Drop table to prevent load error with '.$fullcommanddropb."\n";
-	if ($mode == 'confirm' || $mode == 'confirmdatabase') {
-		$outputfile = $conf->admin->dir_temp.'/out.tmp';
-		$resultarray = $utils->executeCLI($fullcommanddropb, $outputfile, 0, null, 1);
+	if ($fordolibarr) {
+		// Drop llx_accounting_account (if it exists)
+		$fullcommanddropa='echo "drop table llx_accounting_account;" | mysql -A -h '.$newserverbase.' -u '.$newloginbase.' -p'.$newpasswordbase.' -D '.$newdatabasedb;
+		$output=array();
+		$return_var_drop = 0;
+		print dol_print_date(dol_now('gmt'), "%Y%m%d-%H%M%S", 'gmt').' Drop table to prevent load error with '.$fullcommanddropa."\n";
+		if ($mode == 'confirm' || $mode == 'confirmdatabase') {
+			$outputfile = $conf->admin->dir_temp.'/out.tmp';
+			$resultarray = $utils->executeCLI($fullcommanddropa, $outputfile, 0, null, 1);
 
-		$return_var = $resultarray['result'];
-		$content_grabbed = $resultarray['output'];
+			$return_var_drop = $resultarray['result'];
+			$content_grabbed = $resultarray['output'];
 
-		print $content_grabbed."\n";
-		// If table already not exist, return_var is 1
-		// If technical error, return_var is also 1, so we disable this test
-		/*if ($return_var) {
-			print "Error on droping table into the new instance\n";
-			exit(-2);
-		}*/
+			print $content_grabbed."\n";
+			// If table already not exist, return_var is 1
+			// If technical error, return_var is also 1, so we disable this test
+			/*if ($return_var_drop) {
+				print "Error on dropping table into the new instance\n";
+				exit(-2);
+			}*/
+		}
+
+		// Drop llx_accounting_system (if it exists)
+		$fullcommanddropb='echo "drop table llx_accounting_system;" | mysql -A -h '.$newserverbase.' -u '.$newloginbase.' -p'.$newpasswordbase.' -D '.$newdatabasedb;
+		$output=array();
+		$return_var_drop = 0;
+		print dol_print_date(dol_now('gmt'), "%Y%m%d-%H%M%S", 'gmt').' Drop table to prevent load error with '.$fullcommanddropb."\n";
+		if ($mode == 'confirm' || $mode == 'confirmdatabase') {
+			$outputfile = $conf->admin->dir_temp.'/out.tmp';
+			$resultarray = $utils->executeCLI($fullcommanddropb, $outputfile, 0, null, 1);
+
+			$return_var_drop = $resultarray['result'];
+			$content_grabbed = $resultarray['output'];
+
+			print $content_grabbed."\n";
+			// If table already not exist, return_var is 1
+			// If technical error, return_var is also 1, so we disable this test
+			/*if ($return_var_drop) {
+				print "Error on dropping table into the new instance\n";
+				exit(-2);
+			}*/
+		}
 	}
 
 	// Launch load
@@ -661,8 +679,8 @@ if ($mode == 'testdatabase' || $mode == 'test' || $mode == 'confirmdatabase' || 
 		}
 	}
 
-	$output=array();
-	$fullcommandwithoutpass = preg_replace('/\-p"(..).*"$/', '-p\1***hidden***', $fullcommand); // Hide password ecept the 2 first chars
+	$output = array();
+	$fullcommandwithoutpass = preg_replace('/\-p"(..).*"$/', '-p\1***hidden***', $fullcommand); // Hide password except the 2 first chars
 	print dol_print_date(dol_now('gmt'), "%Y%m%d-%H%M%S", 'gmt').' '.$fullcommandwithoutpass."\n";
 	if ($mode == 'confirm' || $mode == 'confirmdatabase') {
 		exec($fullcommand, $output, $return_varmysql);
@@ -676,7 +694,7 @@ if ($mode == 'testdatabase' || $mode == 'test' || $mode == 'confirmdatabase' || 
 
 	// Add file tag
 	if ($mode == 'confirm' || $mode == 'confirmdatabase') {
-		$handle=fopen($dirroot.'/../last_mysqlrestore_'.$instance.'.txt', 'w');
+		$handle = fopen($dirroot.'/../last_mysqlrestore_'.$instance.'.txt', 'w');
 		if ($handle) {
 			fwrite($handle, 'File created after mysql load into '.$instance.". return_varmysql=".$return_varmysql."\n");
 			fwrite($handle, 'The dump file restored was: '.$dirroot.'/../'.$dumpfiletoload."\n");
@@ -687,7 +705,7 @@ if ($mode == 'testdatabase' || $mode == 'test' || $mode == 'confirmdatabase' || 
 	}
 }
 
-$now=dol_now();
+$now = dol_now();
 
 // Update database
 if (!sellyoursaasIsPaidInstance($object)) {
@@ -749,6 +767,8 @@ if (empty($return_var) && empty($return_varmysql)) {
 				// No action
 			}
 		}
+
+		print $msg;
 	}
 } else {
 	if (! empty($return_var)) {

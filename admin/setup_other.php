@@ -33,7 +33,7 @@ $res=0;
 if (! $res && ! empty($_SERVER["CONTEXT_DOCUMENT_ROOT"])) {
 	$res=@include $_SERVER["CONTEXT_DOCUMENT_ROOT"]."/main.inc.php";
 }
-// Try main.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try main.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -299,7 +299,8 @@ $form=new Form($db);
 $help_url="";
 llxHeader("", $langs->trans("SellYouSaasSetup"), $help_url);
 
-$linkback='<a href="'.($backtopage ? $backtopage : DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1').'">'.$langs->trans("BackToModuleList").'</a>';
+$linkback = '<a href="'.($backtopage ? $backtopage : DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1').'">'.img_picto($langs->trans("BackToModuleList"), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans("BackToModuleList").'</span></a>';
+
 print_fiche_titre($langs->trans('SellYouSaasSetup'), $linkback, 'setup');
 
 $error=0;
@@ -313,59 +314,12 @@ print '<input type="hidden" name="action" value="set">';
 
 print '<div class="div-table-responsive">'; // You can use div-table-responsive-no-min if you dont need reserved height for your table
 print '<table class="noborder centpercent">';
+
 print '<tr class="liste_titre">';
-print '<td class="titlefieldmiddle">'.$langs->trans("Parameters").'</td><td></td>';
+print '<td class="titlefieldmiddle">'.$langs->trans("SubscriptionFormAndDashboard").'</td><td></td>';
 print '<td><div class="float">'.$langs->trans("Examples").'</div><div class="floatright">';
 print '</div></td>';
 print "</tr>\n";
-
-print '<tr class="oddeven"><td>'.$langs->trans("SellYourSaasStatusUrl").'</td>';
-print '<td>';
-print '<input class="minwidth300" type="text" name="SELLYOURSAAS_STATUS_URL" value="'.getDolGlobalString('SELLYOURSAAS_STATUS_URL').'">';
-print '</td>';
-print '<td><span class="opacitymedium small">https://status.mysaasdomainname.com</span></td>';
-print '</tr>';
-
-print '<tr class="oddeven"><td>';
-print $form->textwithpicto($langs->trans("SELLYOURSAAS_MAIN_FAQ_URL"), $langs->trans("SELLYOURSAAS_MAIN_FAQ_URLHelp"));
-print '</td>';
-print '<td>';
-print '<input class="minwidth300" type="text" name="SELLYOURSAAS_MAIN_FAQ_URL" value="'.getDolGlobalString('SELLYOURSAAS_MAIN_FAQ_URL').'">';
-print '</td>';
-print '<td></td>';
-print '</tr>';
-
-// SELLYOURSAAS_EXTCSS
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_EXTCSS").'</td>';
-print '<td>';
-print '<input class="maxwidth200" type="text" name="SELLYOURSAAS_EXTCSS" value="'.getDolGlobalString('SELLYOURSAAS_EXTCSS', '').'">';
-print '</td>';
-print '<td><span class="opacitymedium small">dist/css/myaccount.css, https://adomain.com/acssfile.css</span></td>';
-print '</tr>';
-
-// SELLYOURSAAS_CSS
-print '<tr class="oddeven"><td>'.$langs->trans("CSSForCustomerAndRegisterPages").'</td>';
-print '<td>';
-print '<textarea name="SELLYOURSAAS_CSS" class="quatrevingtpercent" rows="3">'.getDolGlobalString('SELLYOURSAAS_CSS').'</textarea>';
-print '</td>';
-print '<td></td>';
-print '</tr>';
-
-// SELLYOURSAAS_ENABLE_OPTINMESSAGES
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ENABLE_OPTINMESSAGES").'</td>';
-print '<td>';
-if ($conf->use_javascript_ajax) {
-	print ajax_constantonoff('SELLYOURSAAS_ENABLE_OPTINMESSAGES', array(), null, 0, 0, 0);
-} else {
-	if (!getDolGlobalString('SELLYOURSAAS_ENABLE_OPTINMESSAGES')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=set_SELLYOURSAAS_ENABLE_OPTINMESSAGES">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
-	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=del_SELLYOURSAAS_ENABLE_OPTINMESSAGES">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
-	}
-}
-print '</td>';
-print '<td><span class="opacitymedium small">Set to yes to add a checkbox on register and customer dashboard page to accept "Commercial offers".</td>';
-print '</tr>';
 
 
 foreach ($arrayofsuffixfound as $service => $suffix) {
@@ -379,7 +333,7 @@ foreach ($arrayofsuffixfound as $service => $suffix) {
 	$constname = 'SELLYOURSAAS_LOGO_MINI'.$suffix;
 	print '<!-- constname = '.$constname.' -->';
 	if (getDolGlobalString($constname)) {
-		print '<a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=removelogo&suffix='.urlencode($suffix).'">'.img_delete($langs->trans("Delete")).'</a>';
+		print '<a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=removelogo&token='.newToken().'&suffix='.urlencode($suffix).'">'.img_delete($langs->trans("Delete")).'</a>';
 		if (file_exists($conf->mycompany->dir_output.'/logos/thumbs/' . getDolGlobalString($constname))) {
 			print '</td></td>';
 			print '<img src="'.DOL_URL_ROOT.'/viewimage.php?modulepart=mycompany&amp;file='.urlencode('logos/thumbs/' . getDolGlobalString($constname)).'">';
@@ -398,7 +352,7 @@ foreach ($arrayofsuffixfound as $service => $suffix) {
 	print '</td><td class="nocellnopadd valignmiddle">';
 	$constname = 'SELLYOURSAAS_LOGO_MINI_BLACK'.$suffix;
 	if (getDolGlobalString($constname)) {
-		print '<a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=removelogoblack&suffix='.urlencode($suffix).'">'.img_delete($langs->trans("Delete")).'</a>';
+		print '<a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=removelogoblack&token='.newToken().'&suffix='.urlencode($suffix).'">'.img_delete($langs->trans("Delete")).'</a>';
 		if (file_exists($conf->mycompany->dir_output.'/logos/thumbs/' . getDolGlobalString($constname))) {
 			print '</td></td>';
 			print '<img src="'.DOL_URL_ROOT.'/viewimage.php?modulepart=mycompany&amp;file='.urlencode('logos/thumbs/' . getDolGlobalString($constname)).'">';
@@ -411,21 +365,121 @@ foreach ($arrayofsuffixfound as $service => $suffix) {
 	print '</td></tr>';
 }
 
-// SELLYOURSAAS_ACCEPT_DISCOUNTCODE
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ACCEPT_DISCOUNTCODE").'</td>';
+// SELLYOURSAAS_EXTCSS
+print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_EXTCSS").'</td>';
+print '<td>';
+print '<input class="maxwidth200" type="text" name="SELLYOURSAAS_EXTCSS" value="'.getDolGlobalString('SELLYOURSAAS_EXTCSS', '').'">';
+print '</td>';
+print '<td><span class="opacitymedium small">dist/css/myaccount.css, dist/css/alt-myaccount-example.css, https://adomain.com/acssfile.css</span></td>';
+print '</tr>';
+
+// SELLYOURSAAS_CSS
+print '<tr class="oddeven"><td>'.$langs->trans("CSSForCustomerAndRegisterPages").'</td>';
+print '<td>';
+print '<textarea name="SELLYOURSAAS_CSS" class="quatrevingtpercent" rows="3">'.getDolGlobalString('SELLYOURSAAS_CSS').'</textarea>';
+print '</td>';
+print '<td></td>';
+print '</tr>';
+
+
+// SELLYOURSAAS_ENABLE_OPTINMESSAGES
+print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ENABLE_OPTINMESSAGES").'</td>';
 print '<td>';
 if ($conf->use_javascript_ajax) {
-	print ajax_constantonoff('SELLYOURSAAS_ACCEPT_DISCOUNTCODE', array(), null, 0, 0, 0);
+	print ajax_constantonoff('SELLYOURSAAS_ENABLE_OPTINMESSAGES', array(), null, 0, 0, 0);
 } else {
-	if (!getDolGlobalString('SELLYOURSAAS_ACCEPT_DISCOUNTCODE')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=set_SELLYOURSAAS_ACCEPT_DISCOUNTCODE">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+	if (!getDolGlobalString('SELLYOURSAAS_ENABLE_OPTINMESSAGES')) {
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=set_SELLYOURSAAS_ENABLE_OPTINMESSAGES&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
 	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=del_SELLYOURSAAS_ACCEPT_DISCOUNTCODE">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=del_SELLYOURSAAS_ENABLE_OPTINMESSAGES&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
 	}
 }
 print '</td>';
-print '<td><span class="opacitymedium small">Set to yes to add a field "Discount code" on the "Enter payment mode" page. Available discounts can be defined on services with type "Application".</td>';
+print '<td><span class="opacitymedium small">Set to yes to add a checkbox on register and customer dashboard page to accept "Commercial offers".</td>';
 print '</tr>';
+
+
+print '<tr class="oddeven"><td>'.$langs->trans("SellYourSaasStatusUrl").'</td>';
+print '<td>';
+print '<input class="minwidth300" type="text" name="SELLYOURSAAS_STATUS_URL" value="'.getDolGlobalString('SELLYOURSAAS_STATUS_URL').'">';
+print '</td>';
+print '<td><span class="opacitymedium small">https://status.mysaasdomainname.com</span></td>';
+print '</tr>';
+
+print '<tr class="oddeven"><td>';
+print $form->textwithpicto($langs->trans("SELLYOURSAAS_MAIN_FAQ_URL"), $langs->trans("SELLYOURSAAS_MAIN_FAQ_URLHelp"));
+print '</td>';
+print '<td>';
+print '<input class="minwidth300" type="text" name="SELLYOURSAAS_MAIN_FAQ_URL" value="'.getDolGlobalString('SELLYOURSAAS_MAIN_FAQ_URL').'">';
+print '</td>';
+print '<td></td>';
+print '</tr>';
+
+print '<tr class="liste_titre">';
+print '<td class="titlefieldmiddle">'.$langs->trans("Payments").'</td><td></td>';
+print '<td><div class="float"></div><div class="floatright">';
+print '</div></td>';
+print "</tr>\n";
+
+// Activate free payment mode
+print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE").'</td>';
+print '<td>';
+if ($conf->use_javascript_ajax) {
+	print ajax_constantonoff('SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE', array(), null, 0, 0, 1);
+} else {
+	if (!getDolGlobalString('SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE')) {
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+	} else {
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+	}
+}
+print '</td>';
+print '<td><span class="opacitymedium small">Set to yes to enable the free mode.</td>';
+print '</tr>';
+
+
+if (!getDolGlobalString("SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE")) {
+	// SELLYOURSAAS_ACCEPT_DISCOUNTCODE
+	print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ACCEPT_DISCOUNTCODE").'</td>';
+	print '<td>';
+	if ($conf->use_javascript_ajax) {
+		print ajax_constantonoff('SELLYOURSAAS_ACCEPT_DISCOUNTCODE', array(), null, 0, 0, 0);
+	} else {
+		if (!getDolGlobalString('SELLYOURSAAS_ACCEPT_DISCOUNTCODE')) {
+			print '<a href="'.$_SERVER['PHP_SELF'].'?action=set_SELLYOURSAAS_ACCEPT_DISCOUNTCODE&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+		} else {
+			print '<a href="'.$_SERVER['PHP_SELF'].'?action=del_SELLYOURSAAS_ACCEPT_DISCOUNTCODE&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		}
+	}
+	print '</td>';
+	print '<td><span class="opacitymedium small">Set to yes to add a field "Discount code" on the "Enter payment mode" page. Available discounts can be defined on services with type "Application".</td>';
+	print '</tr>';
+}
+
+
+print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_MAX_MONTHLY_AMOUNT_OF_INVOICE").'</td>';
+print '<td>';
+print '<input class="maxwidth50" type="text" name="SELLYOURSAAS_MAX_MONTHLY_AMOUNT_OF_INVOICE" value="'.getDolGlobalString('SELLYOURSAAS_MAX_MONTHLY_AMOUNT_OF_INVOICE', '').'">';
+print '</td>';
+print '<td><span class="opacitymedium small">0=No limit</span></td>';
+print '</tr>';
+
+
+print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION").'</td>';
+print '<td>';
+if ($conf->use_javascript_ajax) {
+	print ajax_constantonoff('SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION', array(), null, 0, 0, 0);
+} else {
+	if (!getDolGlobalString('SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION')) {
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=set_SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+	} else {
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=del_SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+	}
+}
+print '</td>';
+print '<td></td>';
+print '</tr>';
+
 
 // Allow SEPA
 print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ENABLE_SEPA").'</td>';
@@ -434,9 +488,9 @@ if ($conf->use_javascript_ajax) {
 	print ajax_constantonoff('SELLYOURSAAS_ENABLE_SEPA', array(), null, 0, 0, 1);
 } else {
 	if (!getDolGlobalString('SELLYOURSAAS_ENABLE_SEPA')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_SEPA">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_SEPA&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
 	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_SEPA">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_SEPA&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
 	}
 }
 print '</td>';
@@ -453,43 +507,22 @@ if (getDolGlobalString('SELLYOURSAAS_ENABLE_SEPA')) {
 	print '</tr>';
 }
 
-// Activate free payment mode
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE").'</td>';
-print '<td>';
-if ($conf->use_javascript_ajax) {
-	print ajax_constantonoff('SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE', array(), null, 0, 0, 0);
-} else {
-	if (!getDolGlobalString('SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
-	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
-	}
-}
-print '</td>';
-print '<td><span class="opacitymedium small">Set to yes to enable the free mode.</td>';
-print '</tr>';
+// Allow customers to set up a second factor on their myaccount login. This whole
+// admin row (including the on/off toggle) is entirely provided by whichever
+// module implements sellyoursaas's 'mainmyaccountloginpage' hooks - if none is
+// installed, nothing is printed at all, since there would be nothing for the
+// toggle to actually turn on.
+$hookmanager->initHooks(array('mainmyaccountloginpage'));
+$hookmanager->executeHooks('printSecondFactorAdminSetup', array());
+print $hookmanager->resPrint;
 
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_MAX_MONTHLY_AMOUNT_OF_INVOICE").'</td>';
-print '<td>';
-print '<input class="maxwidth50" type="text" name="SELLYOURSAAS_MAX_MONTHLY_AMOUNT_OF_INVOICE" value="'.getDolGlobalString('SELLYOURSAAS_MAX_MONTHLY_AMOUNT_OF_INVOICE', '').'">';
-print '</td>';
-print '<td><span class="opacitymedium small">0=No limit</span></td>';
-print '</tr>';
 
-print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION").'</td>';
-print '<td>';
-if ($conf->use_javascript_ajax) {
-	print ajax_constantonoff('SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION', array(), null, 0, 0, 0);
-} else {
-	if (!getDolGlobalString('SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=set_SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
-	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=del_SELLYOURSAAS_INVOICE_FORCE_DATE_VALIDATION">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
-	}
-}
-print '</td>';
-print '<td></td>';
-print '</tr>';
+print '<tr class="liste_titre">';
+print '<td class="titlefieldmiddle">'.$langs->trans("Fees").'</td><td></td>';
+print '<td><div class="float"></div><div class="floatright">';
+print '</div></td>';
+print "</tr>\n";
+
 
 print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_INFRA_COST").'</td>';
 print '<td>';
@@ -505,15 +538,22 @@ print '</td>';
 print '<td><span class="opacitymedium small">0.02</span></td>';
 print '</tr>';
 
+
+print '<tr class="liste_titre">';
+print '<td class="titlefieldmiddle">'.$langs->trans("Cancellation").'</td><td></td>';
+print '<td><div class="float"></div><div class="floatright">';
+print '</div></td>';
+print "</tr>\n";
+
 print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_ASK_DESTROY_REASON").'</td>';
 print '<td>';
 if ($conf->use_javascript_ajax) {
 	print ajax_constantonoff('SELLYOURSAAS_ASK_DESTROY_REASON', array(), null, 0, 0, 0);
 } else {
 	if (!getDolGlobalString('SELLYOURSAAS_ASK_DESTROY_REASON')) {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=set_SELLYOURSAAS_ASK_DESTROY_REASON">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=set_SELLYOURSAAS_ASK_DESTROY_REASON&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
 	} else {
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=del_SELLYOURSAAS_ASK_DESTROY_REASON">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=del_SELLYOURSAAS_ASK_DESTROY_REASON&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
 	}
 }
 print '</td>';
@@ -524,7 +564,7 @@ print '</tr>';
 // Support features
 
 print '<tr class="liste_titre">';
-print '<td>'.$langs->trans("SupportFeatures").'</td><td></td>';
+print '<td>'.$langs->trans("Tickets").' - '.$langs->trans("SupportFeatures").'</td><td></td>';
 print '<td>';
 print '</td>';
 print "</tr>\n";
@@ -560,6 +600,22 @@ foreach ($arrayofsuffixfound as $service => $suffix) {
 		print '</tr>';
 	}
 }
+
+print '<tr class="oddeven"><td>'.$langs->trans("SELLYOURSAAS_SUPPORT_TICKET_CREATE").'</td>';
+print '<td>';
+if ($conf->use_javascript_ajax) {
+	print ajax_constantonoff('SELLYOURSAAS_SUPPORT_TICKET_CREATE', array(), null, 0, 0, 0);
+} else {
+	if (!getDolGlobalString('SELLYOURSAAS_SUPPORT_TICKET_CREATE')) {
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_SUPPORT_TICKET_CREATE&token='.newToken().'">'.img_picto($langs->trans("Disabled"), 'off').'</a>';
+	} else {
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=SELLYOURSAAS_SUPPORT_TICKET_CREATE&token='.newToken().'">'.img_picto($langs->trans("Enabled"), 'on').'</a>';
+	}
+}
+print '</td>';
+print '<td><span class="opacitymedium small"></span></td>';
+print '</tr>';
+
 
 print '</table>';
 print '</div>';

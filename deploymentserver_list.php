@@ -141,7 +141,7 @@ if (!$sortorder) {
 	$sortorder = "ASC";
 }
 
-// Initialize array of search criterias
+// Initialize array of search criteria
 $search_all = GETPOST('search_all', 'alphanohtml');
 $search = array();
 foreach ($object->fields as $key => $val) {
@@ -196,11 +196,11 @@ $arrayfields = dol_sort_array($arrayfields, 'position');
 
 // There is several ways to check permission.
 // Set $enablepermissioncheck to 1 to enable a minimum low level of checks
-$enablepermissioncheck = 0;
+$enablepermissioncheck = 1;
 if ($enablepermissioncheck) {
-	$permissiontoread = $user->hasRight('sellyoursaas', 'deploymentserver', 'read');
-	$permissiontoadd = $user->hasRight('sellyoursaas', 'deploymentserver', 'write');
-	$permissiontodelete = $user->hasRight('sellyoursaas', 'deploymentserver', 'delete');
+	$permissiontoread = $user->hasRight('sellyoursaas', 'read');
+	$permissiontoadd = $user->hasRight('sellyoursaas', 'write');
+	$permissiontodelete = $user->hasRight('sellyoursaas', 'delete');
 } else {
 	$permissiontoread = 1;
 	$permissiontoadd = 1;
@@ -208,7 +208,8 @@ if ($enablepermissioncheck) {
 }
 
 // Security check (enable the most restrictive one)
-if ($user->socid > 0) {
+// Reject external users and the internal user shared by all customers of the myaccount dashboard
+if ($user->socid > 0 || $user->id == getDolGlobalInt('SELLYOURSAAS_ANONYMOUSUSER')) {
 	accessforbidden();
 }
 //if ($user->socid > 0) accessforbidden();
@@ -477,7 +478,7 @@ $arrayofmassactions = array(
 	//'presend'=>img_picto('', 'email', 'class="pictofixedwidth"').$langs->trans("SendByMail"),
 );
 if (!empty($permissiontodelete)) {
-	$arrayofmassactions['predelete'] = img_picto('', 'delete', 'class="pictofixedwidth"').$langs->trans("Delete");
+	//$arrayofmassactions['predelete'] = img_picto('', 'delete', 'class="pictofixedwidth"').$langs->trans("Delete");		// Disabled, too dangerous
 }
 if (GETPOST('nomassaction', 'int') || in_array($massaction, array('presend', 'predelete'))) {
 	$arrayofmassactions = array();
@@ -547,7 +548,7 @@ if (!empty($moreforfilter)) {
 }
 
 $varpage = empty($contextpage) ? $_SERVER["PHP_SELF"] : $contextpage;
-$htmlofselectarray = $form->multiSelectArrayWithCheckbox('selectedfields', $arrayfields, $varpage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN'));  // This also change content of $arrayfields with user setup
+$htmlofselectarray = $form->multiSelectArrayWithCheckbox('selectedfields', $arrayfields, $varpage, $conf->main_checkbox_left_column);  // This also change content of $arrayfields with user setup
 $selectedfields = ($mode != 'kanban' ? $htmlofselectarray : '');
 $selectedfields .= (count($arrayofmassactions) ? $form->showCheckAddButtons('checkforselect', 1) : '');
 
@@ -559,7 +560,7 @@ print '<table class="tagtable nobottomiftotal liste'.($moreforfilter ? " listwit
 // --------------------------------------------------------------------
 print '<tr class="liste_titre_filter">';
 // Action column
-if (getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN')) {
+if ($conf->main_checkbox_left_column) {
 	print '<td class="liste_titre center maxwidthsearch">';
 	$searchpicto = $form->showFilterButtons('left');
 	print $searchpicto;
@@ -620,7 +621,7 @@ if (!empty($arrayfields['nb_backupsremote']['checked'])) {
 	print '<td class="liste_titre"></td>';
 }
 // Action column
-if (!getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN')) {
+if (!$conf->main_checkbox_left_column) {
 	print '<td class="liste_titre center maxwidthsearch">';
 	$searchpicto = $form->showFilterButtons();
 	print $searchpicto;
@@ -635,7 +636,7 @@ $totalarray['nbfield'] = 0;
 // --------------------------------------------------------------------
 print '<tr class="liste_titre">';
 // Action column
-if (getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN')) {
+if ($conf->main_checkbox_left_column) {
 	print getTitleFieldOfList($selectedfields, 0, $_SERVER["PHP_SELF"], '', '', '', '', $sortfield, $sortorder, 'center maxwidthsearch ')."\n";
 	$totalarray['nbfield']++;
 }
@@ -683,7 +684,7 @@ if (!empty($arrayfields['nb_backupsremote']['checked'])) {
 	$totalarray['nbfield']++;
 }
 // Action column
-if (!getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN')) {
+if (!$conf->main_checkbox_left_column) {
 	print getTitleFieldOfList($selectedfields, 0, $_SERVER["PHP_SELF"], '', '', '', '', $sortfield, $sortorder, 'center maxwidthsearch ')."\n";
 	$totalarray['nbfield']++;
 }
@@ -787,7 +788,7 @@ while ($i < $imaxinloop) {
 		$j = 0;
 		print '<tr data-rowid="'.$object->id.'" class="oddeven">';
 		// Action column
-		if (getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN')) {
+		if ($conf->main_checkbox_left_column) {
 			print '<td class="nowrap center">';
 			if ($massactionbutton || $massaction) { // If we are in select mode (massactionbutton defined) or if we have already selected and sent an action ($massaction) defined
 				$selected = 0;
@@ -838,6 +839,10 @@ while ($i < $imaxinloop) {
 					}
 				} elseif ($key == 'rowid') {
 					print $object->showOutputField($val, $key, $object->id, '');
+				} elseif ($key == 'note_private') {
+					print '<div class="small lineheightsmall twolinesmax-normallineheight">';
+					print $object->showOutputField($val, $key, $object->$key, '');
+					print '</div>';
 				} else {
 					print $object->showOutputField($val, $key, $object->$key, '');
 				}
@@ -868,7 +873,7 @@ while ($i < $imaxinloop) {
 		// Column for commands
 		if (!empty($arrayfields['commands']['checked'])) {
 			print '<td class="small tdoverflowmax125">';
-			$html = '<span class="smal">'.$langs->trans("CommandForDeploymentServer").':</span><br>';
+			$html = '<span class="small">'.$langs->trans("CommandForDeploymentServer").':</span><br>';
 			$html .= '<br>';
 			$html .= $langs->trans("CommandToManageRemoteDeploymentAgent").' <span class="opacitymedium">(to run from a deployment server)</span>:<br>';
 			$html .= '<div class="urllink"><input type="text" class="quatrevingtpercent" spellcheck="false" value="';
@@ -878,7 +883,7 @@ while ($i < $imaxinloop) {
 			$html .= '<br>';
 			$html .= $langs->trans("CommandToPutInstancesOnOffline").' <span class="opacitymedium">(to run from a deployment server)</span>:<br>';
 			$html .= '<div class="urllink"><input type="text" class="quatrevingtpercent" value="';
-			$html .= 'sudo '.getDolGlobalString('DOLICLOUD_SCRIPTS_PATH').'/make_instances_offlineonline.sh offline.php test|offline|online';
+			$html .= 'sudo '.getDolGlobalString('DOLICLOUD_SCRIPTS_PATH').'/deployment_make_instances_offlineonline.sh offline.php test|offline|online';
 			$html .= '">';
 			$html .= '</div>';
 
@@ -886,7 +891,7 @@ while ($i < $imaxinloop) {
 				$html .= '<br>';
 				$html .= $langs->trans("CommandToSwithInstanceInReadOnlyMode").' <span class="opacitymedium">(to run from a deployment server)</span>:<br>';
 				$html .= '<div class="urllink"><input type="text" class="quatrevingtpercent" value="';
-				$html .= 'sudo '.getDolGlobalString('DOLICLOUD_SCRIPTS_PATH').'/make_instances_readonly.php '.$object->ref.' (on|off) (test|confirm)';
+				$html .= 'sudo '.getDolGlobalString('DOLICLOUD_SCRIPTS_PATH').'/deployment_make_instances_readonly.sh '.$object->ref.' (readonly|readwrite) (test|confirm)';
 				$html .= '">';
 				$html .= '</div>';
 			}
@@ -899,7 +904,7 @@ while ($i < $imaxinloop) {
 			$html .= '</div>';
 
 			$html .= '<br>';
-			$html .= $langs->trans("CommandToRedeployInstanceOnADeploymentServer").' <span class="opacitymedium">(to run from the master server)</span>:<br>';
+			$html .= $langs->trans("CommandToRedeployInstanceOnADeploymentServer").' <span class="opacitymedium">(to run as admin from the master server)</span>:<br>';
 			$html .= '<div class="urllink"><input type="text" class="quatrevingtpercent" spellcheck="false" value="';
 			$html .= 'sudo '.getDolGlobalString('DOLICLOUD_SCRIPTS_PATH').'/master_redeploy_instances.php '.$object->ref.' test|confirm';
 			$html .= '">';
@@ -908,7 +913,14 @@ while ($i < $imaxinloop) {
 			$html .= '<br>';
 			$html .= $langs->trans("CommandToMoveInstanceOnAnotherDeploymentServer").' <span class="opacitymedium">(to run as admin from the master server)</span>:<br>';
 			$html .= '<div class="urllink"><input type="text" class="quatrevingtpercent" spellcheck="false" value="';
-			$html .= getDolGlobalString('DOLICLOUD_SCRIPTS_PATH').'/master_move_several_instances.php afilter*.'.$object->ref.' withX.mysaaasdomain.com test|confirm';
+			$html .= getDolGlobalString('DOLICLOUD_SCRIPTS_PATH').'/master_move_several_instances.php afilter*.'.$object->ref.' withX.mysaaasdomain.com test|confirmredirect';
+			$html .= '">';
+			$html .= '</div>';
+
+			$html .= '<br>';
+			$html .= $langs->trans("CommandToDeployAModuleOptionOnAllInstances").' <span class="opacitymedium">(to run as root from the deployment server)</span>:<br>';
+			$html .= '<div class="urllink"><input type="text" class="quatrevingtpercent" spellcheck="false" value="';
+			$html .= getDolGlobalString('DOLICLOUD_SCRIPTS_PATH').'/deployment_deploy_module.php test|confirm PRODUCTREF \'afilter*\' alsotrial master_instance_id [FR]';
 			$html .= '">';
 			$html .= '</div>';
 
@@ -1008,7 +1020,7 @@ while ($i < $imaxinloop) {
 			}
 		}
 		// Action column
-		if (!getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN')) {
+		if (!$conf->main_checkbox_left_column) {
 			print '<td class="nowrap center">';
 			if ($massactionbutton || $massaction) { // If we are in select mode (massactionbutton defined) or if we have already selected and sent an action ($massaction) defined
 				$selected = 0;

@@ -108,7 +108,7 @@ if (empty($masterserver)) {
 
 // Load Dolibarr environment
 $res=0;
-// Try master.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try master.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -140,7 +140,7 @@ if (! $res && file_exists($dolibarrdir."/htdocs/master.inc.php")) {
 	$res=@include $dolibarrdir."/htdocs/master.inc.php";
 }
 if (! $res) {
-	print("Include of master fails");
+	print("Include of master fails\n");
 	exit(-1);
 }
 
@@ -150,6 +150,6 @@ print 'Script to create missing payment after successful Stripe payment but not 
 print 'TODO...';
 
 /*
-Scan "Successfuly charge card pm_.... for invoice ...."
-and create payment for those invoices if invoice does not has the payement.
+Scan "Successfully charge card pm_.... for invoice ...."
+and create payment for those invoices if invoice does not has the payment.
 */

@@ -114,8 +114,12 @@ class Packages extends CommonObject
 		'sqlafter' => array('type'=>'text', 'label'=>'Sql after deployment', 'visible'=>3, 'enabled'=>1, 'position'=>70, 'notnull'=>-1, 'help'=>'Sql executed after deployment.<br><br>Can use substitution vars like<br>__APPORGNAME__<br>__APPEMAIL__<br>__APPDOMAIN__<br>__APPCOUNTRYIDCODELABEL__<br>__SMTP_SPF_STRING__<br>__OSUSERNAME__<br>__APPPASSWORD0__<br>__APPPASSWORD0SALTED__<br>__APPPASSWORDSHA256__<br>__APPPASSWORDSHA256SALTED__<br>...'),
 		'sqlpasswordreset' => array('type'=>'text', 'label'=>'Sql to reset password of a deployed instance user', 'visible'=>3, 'enabled'=>1, 'position'=>71, 'notnull'=>-1, 'help'=>'Sql executed after clicking on cogs on backoffice/instance_users.php after a deployment <br><br> Can use substitution vars like<br>__REMOTEUSERID__<br>__NEWUSERPASSWORD__<br>__NEWUSERPASSWORDCRYPTED__'),
 		'sqlafterpaid' => array('type'=>'text', 'label'=>'Sql after switch to paid', 'visible'=>3, 'enabled'=>1, 'position'=>72, 'notnull'=>-1, 'help'=>'Sql executed after entering a payment (or after a deployment if customer is already a paying customer)'),
+		'cliafterdeployoption' => array('type'=>'text', 'label'=>'Shell after option deployment', 'visible'=>3, 'enabled'=>1, 'position'=>72, 'notnull'=>-1, 'help'=>'Sql executed after an option is deployed from (and only from) the customer dashboard'),
+		'sqlafterundeployoption' => array('type'=>'text', 'label'=>'Sql after option undeployment', 'visible'=>3, 'enabled'=>1, 'position'=>73, 'notnull'=>-1, 'help'=>'Sql executed after an option is undeployed from (and only from) the customer dashboard'),
 		'allowoverride' => array('type'=>'varchar(255)', 'label'=>'Option string for virtual host', 'visible'=>-1, 'enabled'=>1, 'position'=>75, 'notnull'=>-1, 'help'=>'Any string to add into the Apache virtual host file. For example, keep empty to not allow apache override<br>Use "AllowOverride All" to allow override.'),
 		'version_formula' => array('type'=>'text', 'label'=>"VersionFormula",  'visible'=>3, 'enabled'=>1, 'position'=>76, 'help'=>'VersionFormulaExamples', 'lang'=>'sellyoursaas@sellyoursaas'),
+		'otherinformations_formula' => array('type'=>'text', 'label'=>"OtherInformationsFormula",  'visible'=>3, 'enabled'=>1, 'position'=>77, 'help'=>'OtherInformationsFormulaExamples', 'lang'=>'sellyoursaas@sellyoursaas'),
+		'sqltoupdateeinvoiceconst' => array('type'=>'text', 'label'=>"Sql to update einvoicing const",  'visible'=>3, 'enabled'=>1, 'position'=>78, 'help'=>'SQL to update einvoicing const for proxy', 'lang'=>'sellyoursaas@sellyoursaas'),
 		'date_creation' => array('type'=>'datetime', 'label'=>'DateCreation', 'visible'=>-2, 'enabled'=>1, 'position'=>500, 'notnull'=>1,),
 		'tms' => array('type'=>'timestamp', 'label'=>'DateModification', 'visible'=>-2, 'enabled'=>1, 'position'=>501, 'notnull'=>1,),
 		'fk_user_creat' => array('type'=>'integer', 'label'=>'UserAuthor', 'visible'=>-2, 'enabled'=>1, 'position'=>502, 'notnull'=>1,),
@@ -150,9 +154,12 @@ class Packages extends CommonObject
 	public $sqlafter;
 	public $sqlpasswordreset;
 	public $sqlafterpaid;
+	public $sqlafterundeployoption;
 	public $allowoverride;
 	public $register_text;
 	public $status;
+	public $otherinformations_formula;
+	public $sqltoupdateeinvoiceconst;
 	// END MODULEBUILDER PROPERTIES
 
 	/**
@@ -279,6 +286,14 @@ class Packages extends CommonObject
 	 */
 	public function update(User $user, $notrigger = false)
 	{
+		// Clean parameters to remove ending / on directories
+		$this->srcfile1 = preg_replace('/\/+$/', '', $this->srcfile1);
+		$this->srcfile2 = preg_replace('/\/+$/', '', $this->srcfile2);
+		$this->srcfile3 = preg_replace('/\/+$/', '', $this->srcfile3);
+		$this->targetsrcfile1 = preg_replace('/\/+$/', '', $this->targetsrcfile1);
+		$this->targetsrcfile2 = preg_replace('/\/+$/', '', $this->targetsrcfile2);
+		$this->targetsrcfile3 = preg_replace('/\/+$/', '', $this->targetsrcfile3);
+
 		return $this->updateCommon($user, $notrigger);
 	}
 

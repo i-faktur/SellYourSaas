@@ -9,7 +9,7 @@
  */
 
 // if (! empty($_SERVER) && (preg_match('/phpsendmail/', @$_SERVER['SCRIPT_FILENAME']) || preg_match('/phpsendmail/', @$_SERVER['SCRIPT_NAME'])) )
-$tmpactionprepend = @$_POST['action'];
+$tmpactionprepend = isset($_POST['action']) ? (string) $_POST['action'] : '';
 
 /* TODO Enable this by default
 $listofwrappers = stream_get_wrappers();
@@ -26,7 +26,8 @@ foreach ($arrayofstreamtodisable as $streamtodisable) {
 if (preg_match('/^send_/', $tmpactionprepend) || in_array($tmpactionprepend, array('send', 'sendallconfirmed', 'relance'))) {
 	$tmpfile='/tmp/phpsendmailprepend-'.posix_getuid().'-'.getmypid().'.tmp';
 	@unlink($tmpfile);
-	file_put_contents($tmpfile, var_export($_SERVER, true));
+	file_put_contents($tmpfile, '#phpsendmailprepend.php is called by any php page but here we keep a log because page has a param action="send..." on '.date('Y-m-d H:i:s')."\n");
+	file_put_contents($tmpfile, var_export($_SERVER, true), FILE_APPEND);
 	chmod($tmpfile, 0660);
 }
 

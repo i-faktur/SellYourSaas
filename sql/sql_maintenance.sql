@@ -37,11 +37,11 @@ select concat("update mysql.user set password = '", u.password, "' where host = 
 
 
 -- Other
-See also the documentation *Documentation SellYourSaas - Master and Deployment Servers*
+-- See also the documentation *Documentation SellYourSaas - Master Server* and *Documentation SellYourSaas - Deployment Servers*
 
 
 
--- List on recuring invoice line and contract invoice line with amount of 9 euros and qty of 1 or 2 for some languages for product 162
+-- List on recurring invoice line and contract invoice line with amount of 9 euros and qty of 1 or 2 for some languages for product 162
 drop table tmp_tmp;
 create table tmp_tmp AS SELECT
 	DISTINCT fr.rowid as frid, s.rowid as sid,
@@ -83,9 +83,87 @@ ORDER BY
 	frid
 
 
-UPDATE llx_facturedet_rec SET subprice = 12, total_ht = 12 * qty, total_tva = 12 * qty * (tva_tx / 100), total_ttc = 12 * qty * (1 + tva_tx / 100), 
+UPDATE llx_facturedet_rec SET subprice = 12, total_ht = 12 * qty, total_tva = 12 * qty * (tva_tx / 100), total_ttc = 12 * qty * (1 + tva_tx / 100),
 multicurrency_subprice = 12, multicurrency_total_ht = 12 * qty, multicurrency_total_tva =  12 * qty * (tva_tx / 100), multicurrency_total_ttc = 12 * qty * (1 + tva_tx / 100)
 where subprice = 12 AND qty IN (1,2) AND rowid IN (SELECT fdrid from tmp_tmp);
 
 UPDATE llx_contratdet SET subprice = 12, price_ht = 12, total_ht = 12 * qty, total_tva = 12 * qty * (tva_tx / 100), total_ttc = 12 * qty * (1 + tva_tx / 100) where subprice = 12 AND qty IN (1,2) AND rowid IN (SELECT cdid from tmp_tmp);
 
+-- alter user dbu... IDENTIFIED WITH mysql_native_password BY '...';
+-- alter user dbu...@'localhost' IDENTIFIED WITH mysql_native_password BY '...';
+
+
+
+-- lines of contract of product einvoicing 197 open alone
+select * from llx_contratdet as cd WHERE cd.statut = 4 and cd.fk_product = 197 and not exists (select * from llx_contratdet as cd2 WHERE cd2.fk_contrat = cd.fk_contrat and cd2.rowid != cd.rowid and cd2.statut != 5)
+
+-- lines of contract open alone
+select * from llx_contratdet as cd WHERE cd.statut = 4 and not exists (select * from llx_contratdet as cd2 WHERE cd2.fk_contrat = cd.fk_contrat and cd2.rowid != cd.rowid and cd2.statut != 5)
+
+-- Close contract lines of product einvoicing 197 if they are alone open
+update llx_contratdet as cd set cd.statut = 5 WHERE cd.statut = 4 and cd.fk_product = 197 and not exists (select * from llx_contratdet as cd2 WHERE cd2.fk_contrat = cd.fk_contrat and cd2.rowid != cd.rowid and cd2.statut != 5);
+
+
+
+----------------------------------------------
+-- Case of lines with different rates in same invoice or template invoice(should not happen)
+----------------------------------------------
+
+-- Detect invoice with different rates - Pb !
+select rowid, fk_facture, tva_tx, total_ttc
+from llx_facturedet as fd
+where (
+select COUNT(DISTINCT tva_tx) as nb
+from llx_facturedet as fd2
+where fd2.fk_facture = fd.fk_facture) > 1
+order by fd.fk_facture
+
+-- Create a tmp table with list of pb in invoices
+CREATE TABLE llx_facturedet_multi_tva AS
+SELECT fd.rowid, fd.fk_facture, fd.tva_tx, fd.total_ttc
+FROM llx_facturedet AS fd
+WHERE (
+    SELECT COUNT(DISTINCT fd2.tva_tx)
+    FROM llx_facturedet AS fd2
+    WHERE fd2.fk_facture = fd.fk_facture
+) > 1;
+
+-- Detect template invoice with different rates - Pb !
+select rowid, fk_facture, tva_tx, total_ttc
+from llx_facturedet_rec as fd
+where (
+select COUNT(DISTINCT tva_tx) as nb
+from llx_facturedet_rec as fd2
+where fd2.fk_facture = fd.fk_facture) > 1
+order by fd.fk_facture
+
+-- Create a tmp table with list of pb in template invoices
+CREATE TABLE llx_facturedet_rec_multi_tva AS
+SELECT fd.rowid, fd.fk_facture, fd.tva_tx, fd.total_ttc
+FROM llx_facturedet_rec AS fd
+WHERE (
+    SELECT COUNT(DISTINCT fd2.tva_tx)
+    FROM llx_facturedet_rec AS fd2
+    WHERE fd2.fk_facture = fd.fk_facture
+) > 1;
+
+
+-- Fix vat rate on invoice line where total_ttc was zero (so no risk of corruption)
+update llx_facturedet set tva_tx = 20 where tva_tx = 0 AND total_ttc = 0 AND fk_facture in (select fk_facture from llx_facturedet_multi_tva
+where tva_tx = 20 and total_ttc != 0);
+
+update llx_facturedet set tva_tx = 8.5 where tva_tx = 0 AND total_ttc = 0 AND fk_facture in (select fk_facture from llx_facturedet_multi_tva
+where tva_tx = 8.5 and total_ttc != 0);
+
+update llx_facturedet set tva_tx = 0 where tva_tx != 0 AND total_ttc = 0 AND fk_facture in (select fk_facture from llx_facturedet_multi_tva
+where tva_tx = 0 and total_ttc != 0);
+
+-- Fix vat rate on teplate invoice line where total_ttc was zero (so no risk of corruption)
+update llx_facturedet_rec set tva_tx = 20 where tva_tx = 0 AND total_ttc = 0 AND fk_facture in (select fk_facture from llx_facturedet_rec_multi_tva
+where tva_tx = 20 and total_ttc != 0);
+
+update llx_facturedet_rec set tva_tx = 8.5 where tva_tx = 0 AND total_ttc = 0 AND fk_facture in (select fk_facture from llx_facturedet_rec_multi_tva
+where tva_tx = 8.5 and total_ttc != 0);
+
+update llx_facturedet_rec set tva_tx = 0 where tva_tx != 0 AND total_ttc = 0 AND fk_facture in (select fk_facture from llx_facturedet_rec_multi_tva
+where tva_tx = 0 and total_ttc != 0);

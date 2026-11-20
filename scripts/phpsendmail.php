@@ -1,13 +1,14 @@
 #!/usr/bin/php
 <?php
 /**
-  This script is a sendmail wrapper for php to log calls of the php mail() function.
-  Author: Till Brehm, www.ispconfig.org
-  (Hopefully) secured by David Goodwin <david @ _palepurple_.co.uk>
-
-  Modify your php.ini file to add:
-  sendmail_path = /usr/local/bin/phpsendmail.php
-*/
+ * This script is a sendmail wrapper for php to log calls of the php mail() function.
+ * Author: Till Brehm, www.ispconfig.org
+ * (Hopefully) secured by David Goodwin <david @ _palepurple_.co.uk>
+ * Modified by Laurent Destailleur <eldy@users.sourceforge.net> for SellYourSaas.org project
+ *
+ * Modify your php.ini file to add:
+ * sendmail_path = /usr/local/bin/phpsendmail.php
+ */
 
 //setlocale(LC_CTYPE, "en_US.UTF-8");
 
@@ -16,7 +17,6 @@ $logfile = '/var/log/phpsendmail.log';
 
 // The directory $pathtospamdir must have permission rwxrwxrwx and not rwxrwxrwt
 $pathtospamdir = '/home/admin/wwwroot/dolibarr_documents/sellyoursaas_local/spam';
-//$pathtospamdir = '/tmp/spam';
 
 //* Get the email content
 $mail='';
@@ -53,7 +53,7 @@ if ($fp) {
 		if ($tmpline[0] == 'maxemailperdaypaid') {
 			$maxemailperdaypaid = $tmpline[1];
 		}
-		if ($tmpline[0] == 'pathtospamdir') {
+		if ($tmpline[0] == 'pathtospamdir' && !empty($tmpline[1])) {
 			$pathtospamdir = $tmpline[1];
 		}
 	}
@@ -80,35 +80,26 @@ if (empty($MAXPERDAYPAID)) {
 	$MAXPERDAYPAID=1000;
 }
 
+
 // Main
 
 file_put_contents($logfile, date('Y-m-d H:i:s') . " php.ini file loaded is ".php_ini_loaded_file()."\n", FILE_APPEND);
 
-if (function_exists('shell_exec')) {
-	file_put_contents($logfile, date('Y-m-d H:i:s') . " shell_exec is available. ok\n", FILE_APPEND);
+$EXEC ='exec';
+
+if (function_exists($EXEC)) {
+	file_put_contents($logfile, date('Y-m-d H:i:s') . " ".$EXEC." is available. ok\n", FILE_APPEND);
 } else {
-	file_put_contents($logfile, date('Y-m-d H:i:s') . " The function shell_exec is not available in shell context - exit 1\n", FILE_APPEND);
+	file_put_contents($logfile, date('Y-m-d H:i:s') . " The function shell_exec is not available in shell context (check PHP parameter disable_functions) - exit 1\n", FILE_APPEND);
 	exit(1);
 }
-/*$disabledfunction = ini_get('disable_functions');
-if ($disabledfunction) {
-	if (strpos($disabledfunction, 'shell_exec') === false) {
-		file_put_contents($logfile, date('Y-m-d H:i:s') . " shell_exec is not disabled. ok\n", FILE_APPEND);
-	} else {
-		file_put_contents($logfile, date('Y-m-d H:i:s') . " The function shell_exec is disabled by disable_functions - exit 1\n", FILE_APPEND);
-		exit(1);
-	}
-} else {
-	file_put_contents($logfile, date('Y-m-d H:i:s') . " failed to get disable_functions.\n", FILE_APPEND);
-}
-*/
 
 
 // Load $instanceofuser
-$instanceofuser = getInstancesOfUser($pathtospamdir);
+$instanceofuser = getInstancesOfUser($pathtospamdir, $logfile);
 
 // Load $blacklistips
-$blacklistips = getBlackListIps($pathtospamdir);
+$blacklistips = getBlackListIps($pathtospamdir, $logfile);
 
 
 
@@ -166,7 +157,8 @@ while ($line = fgets($pointer)) {
 	$mail .= $line;
 }
 
-$tmpfile='/tmp/phpsendmail-'.posix_getuid().'-'.getmypid().'.tmp';
+$tmpfile = '/tmp/phpsendmail-'.posix_getuid().'-'.getmypid().'.tmp';
+file_put_contents($logfile, date('Y-m-d H:i:s') . ' write content of email into file '.$tmpfile."\n", FILE_APPEND);
 @unlink($tmpfile);
 file_put_contents($tmpfile, $mail);
 chmod($tmpfile, 0660);
@@ -183,32 +175,37 @@ for ($i = 1; $i < $_SERVER['argc']; $i++) {
 }
 
 if (! $optionffound) {
-	file_put_contents($logfile, date('Y-m-d H:i:s') . ' option -f not found. Args are '.join(' ', $_SERVER['argv']).'. We get if from the header'."\n", FILE_APPEND);
+	file_put_contents($logfile, date('Y-m-d H:i:s') . ' option -f not found. Args are '.join(' ', $_SERVER['argv']).'. We get it from the header'."\n", FILE_APPEND);
 	$command .= "'-f".$emailfrom."'";
 }
+$command .= ' 2>&1';
 
 $ip = empty($_SERVER["REMOTE_ADDR"]) ? '' : $_SERVER["REMOTE_ADDR"];
 if (empty($ip)) {
 	file_put_contents($logfile, date('Y-m-d H:i:s') . ' ip unknown. See tmp file '.$tmpfile."\n", FILE_APPEND);
+	$ip = 'unknown';
 	// exit(7);		// We do not exit, this can occurs sometime
 }
 
 //file_put_contents($logfile, date('Y-m-d H:i:s')." Nb of entry into instanceofuser = ".count($instanceofuser), FILE_APPEND);
+$countnbprocess = 0;
 
-// Count other existing file starting with '/tmp/phpsendmail-'.posix_getuid()
-// and return error if nb is higher than 500
-$commandcheck = 'find /tmp/phpsendmail-'.posix_getuid().'-* -mtime -1 | wc -l';
+// Count tmp files using full native PHP
+$pattern = '/tmp/phpsendmail-'.posix_getuid().'-*';
 
-// Execute the command
-// We need 'shell_exec' here that return all the result as string and not only first line like 'exec'
-//$resexec = shell_exec("id");
-//file_put_contents($logfile, date('Y-m-d H:i:s')." id = ".$resexec."\n", FILE_APPEND);
-$resexec = shell_exec($commandcheck);
-$resexec = (int) (empty($resexec) ? 0 : trim($resexec));
+$files = glob($pattern);
+if ($files !== false) {
+	$limitTime = time() - 24 * 60 * 60; 	// 24 hours
+	foreach ($files as $file) {
+		if (is_file($file) && filemtime($file) >= $limitTime) {
+			$countnbprocess++;
+		}
+	}
+}
 
 $MAXALLOWED = $MAXPERDAYPAID;
 if ($usernamestring) {
-	if ($usernamestring == 'admin') {
+	if ($usernamestring == 'root' || $usernamestring == 'admin') {
 		$MAXALLOWED = $MAXPERDAYFORADMIN;
 	} else {
 		if (in_array($usernamestring, array_keys($instanceofuser))) {
@@ -219,9 +216,9 @@ if ($usernamestring) {
 	}
 }
 
-file_put_contents($logfile, date('Y-m-d H:i:s')." Nb of processes found with ".$commandcheck." = ".$resexec." (we accept ".$MAXALLOWED.")\n", FILE_APPEND);
+file_put_contents($logfile, date('Y-m-d H:i:s')." Nb of processes found by counting files ".$pattern." = ".$countnbprocess." (we accept ".$MAXALLOWED.")\n", FILE_APPEND);
 
-if ($resexec > $MAXALLOWED) {
+if ($countnbprocess > $MAXALLOWED) {
 	file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . $ip . ' sellyoursaas rules ko quota reached - exit 6. User has reached its quota of '.$MAXALLOWED.".\n", FILE_APPEND);
 	exit(6);
 }
@@ -238,17 +235,19 @@ if ($bccline) {
 }
 file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . $fromline, FILE_APPEND);
 file_put_contents($logfile, date('Y-m-d H:i:s') . ' Email detected into From: '. $emailfrom."\n", FILE_APPEND);
-file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . $messageidline, FILE_APPEND);
-file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . $referenceline, FILE_APPEND);
+file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . ($messageidline ? $messageidline : "No Message-ID detected\n"), FILE_APPEND);
+file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . ($referenceline ? $referenceline : "No Reference detected\n"), FILE_APPEND);
 file_put_contents($logfile, date('Y-m-d H:i:s') . ' PWD=' . (empty($_ENV['PWD']) ? (empty($_SERVER["PWD"]) ? '' : $_SERVER["PWD"]) : $_ENV['PWD'])." - REQUEST_URI=".(empty($_SERVER["REQUEST_URI"]) ? '' : $_SERVER["REQUEST_URI"])."\n", FILE_APPEND);
 
 
-// Check if IP is in blacklist
+// Check if remote user IP is in blacklist
 if (is_array($blacklistips) && in_array($ip, $blacklistips)) {
 	file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . $ip . ' sellyoursaas rules ko blacklist - exit 2. Blacklisted ip '.$ip." found into file ".$pathtospamdir."/blacklistip\n", FILE_APPEND);
 	exit(3);
 }
 
+
+file_put_contents($logfile, date('Y-m-d H:i:s') . " Load file with list of blacklisted email from ".$pathtospamdir."/blacklistfrom\n", FILE_APPEND);
 
 $blacklistoffroms = @file_get_contents($pathtospamdir.'/blacklistfrom');
 if ($blacklistoffroms === false) {
@@ -260,6 +259,9 @@ if ($blacklistoffroms === false) {
 		exit(4);
 	}
 }
+
+
+file_put_contents($logfile, date('Y-m-d H:i:s') . " Load file with list of blacklisted dir in REQUEST_URI from ".$pathtospamdir."/blacklistdir\n", FILE_APPEND);
 
 $blacklistofdirs = @file_get_contents($pathtospamdir.'/blacklistdir');
 if ($blacklistofdirs === false) {
@@ -276,6 +278,9 @@ if ($blacklistofdirs === false) {
 	}
 }
 
+
+file_put_contents($logfile, date('Y-m-d H:i:s') . " Load file with list of blacklisted content from ".$pathtospamdir."/blacklistcontent\n", FILE_APPEND);
+
 $blacklistofcontents = @file_get_contents($pathtospamdir.'/blacklistcontent');
 if ($blacklistofcontents === false) {
 	file_put_contents($logfile, date('Y-m-d H:i:s') . " ERROR $pathtospamdir/blacklistcontent can't be read.\n", FILE_APPEND);
@@ -290,7 +295,7 @@ if ($blacklistofcontents === false) {
 			chmod($pathtospamdir."/blacklistmail", 0666);
 
 			// Add ip to blacklistip
-			if (! empty($ip)) {
+			if (! empty($ip) && $ip != 'unknown') {
 				file_put_contents($pathtospamdir.'/blacklistip', $ip."\n", FILE_APPEND);
 				chmod($pathtospamdir."/blacklistip", 0666);
 			}
@@ -300,7 +305,7 @@ if ($blacklistofcontents === false) {
 }
 
 if (empty($fromline) && empty($emailfrom)) {
-	file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . $ip . ' cant send email - exit 1. From not provided. See tmp file '.$tmpfile."\n", FILE_APPEND);
+	file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . $ip . ' can not send email - exit 1. From not provided. See tmp file '.$tmpfile."\n", FILE_APPEND);
 	exit(1);
 } elseif (($nbto + $nbcc + $nbbcc) > $MAXOK) {
 	file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . $ip . ' sellyoursaas rules ko toomanyrecipient - exit 2. ( >'.$MAXOK.' : ' . $nbto . ' ' . $nbcc . ' ' . $nbbcc . ' ) ' . (empty($_ENV['PWD']) ? '' : $_ENV['PWD'])."\n", FILE_APPEND);
@@ -313,23 +318,30 @@ if (empty($fromline) && empty($emailfrom)) {
 
 file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' .$command."\n", FILE_APPEND);
 
+$resexecstring = '';
+
 // Execute the command to send email
-// We need 'shell_exec' here that return all the result as string and not only first line like 'exec'
-$resexec =  shell_exec($command);
-
-if (empty($ip)) {
-	file_put_contents($logfile, "--- no ip detected ---", FILE_APPEND);
+if ($EXEC == 'shell_exec') {
+	// We use 'shell_exec' here that return all the result as string and not only first line like 'exec' even ifexec can return all result too by using the second parameter output.
+	$resexecstring =  shell_exec($command);
 }
-if (empty($ip)) {
-	file_put_contents($logfile, var_export($_SERVER, true), FILE_APPEND);
-}
-if (empty($ip)) {
-	file_put_contents($logfile, var_export($_ENV, true), FILE_APPEND);
+if ($EXEC == 'exec') {
+	$tmpresult = array();
+	$resexec = exec($command, $tmpresult);
+	$resexecstring = implode("\n", $tmpresult);
 }
 
-time_nanosleep(0, 200000000);	// Add a delay to reduce effect of successfull spamming
+if (empty($ip) || $ip == 'unknown') {
+	file_put_contents($logfile, date('Y-m-d H:i:s') . " --- no ip detected ---\n", FILE_APPEND);
+	file_put_contents($logfile, date('Y-m-d H:i:s') . ' ' . var_export($_SERVER, true)."\n", FILE_APPEND);
+	file_put_contents($logfile, date('Y-m-d H:i:s') . ' '. var_export($_ENV, true)."\n", FILE_APPEND);
+}
 
-return $resexec;
+file_put_contents($logfile, date('Y-m-d H:i:s') . ' resexecstring=' . var_export($resexecstring, true)."\n", FILE_APPEND);
+
+time_nanosleep(0, 200000000);	// Add a delay to reduce effect of successful spamming
+
+return $resexecstring;
 
 
 
@@ -338,10 +350,13 @@ return $resexec;
  * getInstancesOfUser()
  *
  * @param	string	$pathtospamdir		Spam directory
+ * @param	string	$logfile			File name for log
  * @return	array						Array of instances in mailquota (so paid instances). Key is osu... user. Value is an array.
  */
-function getInstancesOfUser($pathtospamdir)
+function getInstancesOfUser($pathtospamdir, $logfile)
 {
+	file_put_contents($logfile, date('Y-m-d H:i:s') . " Load file with mail quota ".$pathtospamdir."/mailquota\n", FILE_APPEND);
+
 	$instanceofuser = array();
 	// Loop on each line of $pathtospamdir/mailquota
 	$fp = @fopen($pathtospamdir."/mailquota", "r");
@@ -357,7 +372,6 @@ function getInstancesOfUser($pathtospamdir)
 		}
 		fclose($fp);
 	} else {
-		global $logfile;
 		file_put_contents($logfile, date('Y-m-d H:i:s') . " ERROR $pathtospamdir/mailquota (generated by cron batch_detect_evil_instance.php) can't be read (check apparmor log, check also that apache-php does not use a private /tmp directory).\n", FILE_APPEND);
 	}
 	return $instanceofuser;
@@ -367,10 +381,13 @@ function getInstancesOfUser($pathtospamdir)
  * getBlackListIps()
  *
  * @param	string	$pathtospamdir		Spam directory
+ * @param	string	$logfile			File name for log
  * @return	array						Array of blacklisted IPs. Key and value are the IP.
  */
-function getBlackListIps($pathtospamdir)
+function getBlackListIps($pathtospamdir, $logfile)
 {
+	file_put_contents($logfile, date('Y-m-d H:i:s') . " Load file with list of IP ".$pathtospamdir."/blacklistip\n", FILE_APPEND);
+
 	$blacklistips = array();
 	// Loop on each line of $pathtospamdir/mailquota
 	$fp = @fopen($pathtospamdir."/blacklistip", "r");

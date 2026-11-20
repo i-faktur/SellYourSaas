@@ -27,7 +27,7 @@ $res=0;
 if (! $res && ! empty($_SERVER["CONTEXT_DOCUMENT_ROOT"])) {
 	$res=@include $_SERVER["CONTEXT_DOCUMENT_ROOT"]."/main.inc.php";
 }
-// Try main.inc.php into web root detected using web root caluclated from SCRIPT_FILENAME
+// Try main.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp=empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];$tmp2=realpath(__FILE__); $i=strlen($tmp)-1; $j=strlen($tmp2)-1;
 while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i]==$tmp2[$j]) {
 	$i--;
@@ -102,14 +102,29 @@ $serverprice = !getDolGlobalString('SELLYOURSAAS_INFRA_COST') ? '100' : $conf->g
  *	Actions
  */
 
+// Security check - Actions to change setup need write permission
+$arrayofprotectedactions = array('update', 'setSELLYOURSAAS_DASHBOARD_OFF', 'setSELLYOURSAAS_DISABLE_NEW_INSTANCES', 'setSELLYOURSAAS_ANNOUNCE_ON');
+if ((in_array($action, $arrayofprotectedactions) || GETPOST('saveannounce', 'alpha')) && ! $user->hasRight('sellyoursaas', 'write')) {
+	setEventMessages($langs->trans("NotEnoughPermissions"), null, 'errors');
+	$action = '';
+}
+
 if ($action == 'update') {
 	dolibarr_set_const($db, "NLTECHNO_NOTE", GETPOST("NLTECHNO_NOTE", 'none'), 'chaine', 0, '', $conf->entity);
 }
 
-if (GETPOST('saveannounce', 'alpha')) {
+if (GETPOST('saveannounce', 'alpha') && $user->hasRight('sellyoursaas', 'write')) {
 	dolibarr_set_const($db, "SELLYOURSAAS_ANNOUNCE", GETPOST("SELLYOURSAAS_ANNOUNCE", 'none'), 'chaine', 0, '', $conf->entity);
 }
 
+if ($action == 'setSELLYOURSAAS_DASHBOARD_OFF') {
+	if (GETPOST('value')) {
+		dolibarr_set_const($db, 'SELLYOURSAAS_DASHBOARD_OFF', 1, 'chaine', 0, '', $conf->entity);
+		dolibarr_set_const($db, 'SELLYOURSAAS_DISABLE_NEW_INSTANCES', 1, 'chaine', 0, '', $conf->entity);
+	} else {
+		dolibarr_set_const($db, 'SELLYOURSAAS_DASHBOARD_OFF', 0, 'chaine', 0, '', $conf->entity);
+	}
+}
 if ($action == 'setSELLYOURSAAS_DISABLE_NEW_INSTANCES') {
 	if (GETPOST('value')) {
 		dolibarr_set_const($db, 'SELLYOURSAAS_DISABLE_NEW_INSTANCES', 1, 'chaine', 0, '', $conf->entity);
@@ -150,7 +165,7 @@ if ($resql) {
 	$nbtotalofrecords = $objforcount->nbtotalofrecords;
 	$db->free($resql);
 } else {
-    dol_print_error($db);
+	dol_print_error($db);
 }
 
 $head = sellYourSaasBackofficePrepareHead($nbtotalofrecords);
@@ -261,10 +276,12 @@ $param = '';
 print '<form method="post" action="'.dol_buildpath('/sellyoursaas/backoffice/index.php', 1).'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<table class="noborder nohover centpercent">';
+
 print '<tr class="liste_titre">';
 print '<td>';
 print $langs->trans('Website').' & '.$langs->trans('CustomerAccountArea');
 print '</td></tr>';
+
 print '<tr class="oddeven"><td>';
 $enabledisablehtml='';
 if (getDolGlobalString('SELLYOURSAAS_DISABLE_NEW_INSTANCES')) {
@@ -291,6 +308,24 @@ if (getDolGlobalString('SELLYOURSAAS_DISABLE_NEW_INSTANCES')) {
 }
 
 print '</td></tr>';
+
+print '<tr class="oddeven"><td>';
+$enabledisabledashboard='';
+if (!getDolGlobalString('SELLYOURSAAS_DASHBOARD_OFF')) {
+	// Button off, click to enable
+	$enabledisabledashboard.='<a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=setSELLYOURSAAS_DASHBOARD_OFF&token='.newToken().'&value=1'.$param.'">';
+	$enabledisabledashboard.=img_picto($langs->trans("Enabled"), 'switch_on', '', false, 0, 0, '', 'valignmiddle paddingright');
+	$enabledisabledashboard.='</a>';
+} else {
+	// Button on, click to disable
+	$enabledisabledashboard.='<a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=setSELLYOURSAAS_DASHBOARD_OFF&token='.newToken().'&value=0'.$param.'">';
+	$enabledisabledashboard.=img_picto($langs->trans('Disabled'), 'switch_off', '', false, 0, 0, '', 'error valignmiddle paddingright');
+	$enabledisabledashboard.='</a>';
+}
+print $enabledisabledashboard;
+print $langs->trans("EnableDashboards");
+print '</td></tr>';
+
 print '<tr class="oddeven"><td>';
 $enabledisableannounce='';
 if (!getDolGlobalString('SELLYOURSAAS_ANNOUNCE_ON')) {
@@ -376,7 +411,16 @@ print '</td><td align="right">';
 print '<font size="+2">'.$totalresellers.'</font>';
 print '</td></tr>';
 print '<tr class="oddeven"><td class="wordwrap wordbreak">';
-$texthelp = $langs->trans("NbOfInstancesActivePayingDesc");
+
+$transkeyforactivepayinghelp = "NbOfInstancesActivePayingDesc";
+$transkeyfornbinstanceactivepaying = "NbOfInstancesActivePaying";
+$transkeyfornbinstanceactivepayingall = "NbOfInstancesActivePayingAll";
+if (getDolGlobalString('SELLYOURSAAS_ENABLE_FREE_PAYMENT_MODE')) {
+	$transkeyfornbinstanceactivepaying = "NbOfInstancesActiveFree";
+	$transkeyfornbinstanceactivepayingall = "NbOfInstancesActiveFreeAll";
+}
+
+$texthelp = $langs->trans($transkeyforactivepayinghelp);
 $stringlistofinstancespayingwithoutrecinvoice = '';
 $nboflistofinstancespayingwithoutrecinvoice = 0;
 if (!empty($rep) && is_array($rep['listofinstancespayingwithoutrecinvoice'])) {
@@ -386,7 +430,7 @@ if (!empty($rep) && is_array($rep['listofinstancespayingwithoutrecinvoice'])) {
 		$stringlistofinstancespayingwithoutrecinvoice .= ($stringlistofinstancespayingwithoutrecinvoice ? ', ' : '').$arrayofcontract['thirdparty_name'].' - '.$arrayofcontract['contract_ref']."\n";
 	}
 }
-print $form->textwithpicto($langs->trans("NbOfInstancesActivePaying"), $texthelp);
+print $form->textwithpicto($langs->trans($transkeyfornbinstanceactivepaying), $texthelp);
 if ($mode == 'refreshstats') {	// Info not saved into session (too large), so we show it only after a refresh
 	$texthelp = $langs->trans("NbOfInstancesActivePayingWithoutRecInvoice", $nboflistofinstancespayingwithoutrecinvoice);
 	if ($stringlistofinstancespayingwithoutrecinvoice) {
@@ -394,7 +438,7 @@ if ($mode == 'refreshstats') {	// Info not saved into session (too large), so we
 		$texthelp .= $stringlistofinstancespayingwithoutrecinvoice;
 	}
 }
-print ' | '.$form->textwithpicto($langs->trans("NbOfInstancesActivePayingAll"), $texthelp).' | '.$langs->trans("NbOfActiveInstances").' ';
+print ' | '.$form->textwithpicto($langs->trans($transkeyfornbinstanceactivepayingall), $texthelp).' | '.$langs->trans("NbOfActiveInstances").' ';
 print '</td><td align="right">';
 if (! empty($_SESSION['stats_totalusers'])) {
 	print '<font size="+2">'.$totalinstancespaying.' | '.$totalinstancespayingall.' | '.$totalinstances.'</font>';
@@ -411,7 +455,7 @@ if (!empty($rep) && is_array($rep['listofinstancespaying'])) {
 print "\n".'-->';
 print '</td></tr>';
 print '<tr class="oddeven"><td class="wordwrap wordbreak">';
-print $langs->trans("NbOfSuspendedInstances").' '.$langs->trans("payed").' | '.$langs->trans("test");
+print $langs->trans("NbOfSuspendedInstances").' '.$langs->trans("PayedMode").' | '.$langs->trans("TrialMode");
 print '</td><td align="right">';
 if (! empty($_SESSION['stats_totalusers'])) {
 	print '<font size="+2">'.$totalinstancessuspendedpaying.' | '.$totalinstancessuspendedfree.'</font>';
@@ -475,7 +519,7 @@ print '</table>';
 print '</div></div></div>';
 
 //$servicetouse='old';
-$servicetouse=strtolower($conf->global->SELLYOURSAAS_NAME);
+$servicetouse=strtolower(getDolGlobalString('SELLYOURSAAS_NAME'));
 $regs = array();
 
 // array(array(0=>'labelxA',1=>yA1,...,n=>yAn), array('labelxB',yB1,...yBn))
